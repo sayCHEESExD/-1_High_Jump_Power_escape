@@ -81,7 +81,7 @@ export class EnergyService {
         gained += (distance / ENERGY.strideDistance) * perStep * treadmillRate(player.treadmill, player.rebirths);
       } else {
         const distance = Math.hypot(player.x - tracker.x, player.z - tracker.z);
-        const cap = MOVEMENT.runSpeed * step * ENERGY.creditSlack + 0.5;
+        const cap = MOVEMENT.moveSpeed * step * ENERGY.creditSlack + 0.5;
         if (distance <= cap) gained += (distance / ENERGY.strideDistance) * perStep;
       }
 

@@ -12,6 +12,26 @@ import { PerspectiveCamera, Vector3 } from 'three';
  */
 const RESPAWN_ZOOM_DISTANCE = 10;
 
+/** Landing shake: how long it lasts, how far it moves at full strength, how fast it jitters. */
+const SHAKE_DURATION = 0.4;
+/** Sideways/vertical jitter at full strength, in world units. */
+const SHAKE_AMPLITUDE = 0.9;
+const SHAKE_FREQUENCY = 48;
+/** How far the camera drops on impact and springs back, in world units. */
+const SHAKE_DIP = 1.1;
+/** Roll kick at full strength, in radians (about 1.7 degrees). */
+const SHAKE_ROLL = 0.03;
+/** Field-of-view punch at full strength, in degrees. */
+const SHAKE_FOV = 5;
+/** Every real landing shakes at least this much, so none are invisible. */
+const SHAKE_MIN_STRENGTH = 0.45;
+
+/** Wheel zoom limits, as multiples of the default distance, and its feel. */
+const ZOOM_MIN = 0.35;
+const ZOOM_MAX = 3;
+const ZOOM_PER_PIXEL = 0.0012;
+const ZOOM_EASE = 12;
+
 /** How fast that extra distance is given up. Higher is snappier. */
 const RESPAWN_ZOOM_RATE = 6.5;
 
@@ -57,6 +77,40 @@ export class ThirdPersonCamera {
   private rush = 0;
 
   private aspect = 1;
+
+  /** Seconds of landing shake left, and how strong the current shake is. */
+  private shakeTime = 0;
+  private shakeStrength = 0;
+  private shakeClock = 0;
+  private readonly reducedMotion =
+    typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+  /**
+   * A short landing shake. `strength` is 0..1. A stronger impact while a shake
+   * is running takes over; a weaker one never cuts a big one short.
+   */
+  shake(strength: number): void {
+    if (!(strength > 0)) return;
+    const clamped = Math.min(strength, 1);
+    const s = (SHAKE_MIN_STRENGTH + (1 - SHAKE_MIN_STRENGTH) * clamped) * (this.reducedMotion ? 0.35 : 1);
+    const remaining = this.shakeStrength * (this.shakeTime / SHAKE_DURATION);
+    if (s < remaining) return;
+    this.shakeStrength = s;
+    this.shakeTime = SHAKE_DURATION;
+  }
+
+  /** Mouse-wheel zoom, as a multiple of the default distance. Eased toward its target. */
+  private zoom = 1;
+  private zoomTarget = 1;
+
+  /**
+   * Zoom by a wheel delta in pixels. Scrolling up (negative) zooms IN, down
+   * zooms out. Exponential, so every notch feels the same at any distance.
+   */
+  addZoom(deltaPixels: number): void {
+    if (!Number.isFinite(deltaPixels)) return;
+    this.zoomTarget = clamp(this.zoomTarget * Math.exp(deltaPixels * ZOOM_PER_PIXEL), ZOOM_MIN, ZOOM_MAX);
+  }
 
   constructor() {
     this.camera = new PerspectiveCamera(CAMERA.fov, 1, CAMERA.near, CAMERA.far);
@@ -132,8 +186,11 @@ export class ThirdPersonCamera {
     const targetRush = clamp(speed / CAMERA.speedReference, 0, 1);
     this.rush += (targetRush - this.rush) * (1 - Math.exp(-CAMERA.speedEase * delta));
 
-    const distance = CAMERA.distance + this.zoomOffset + CAMERA.speedDistance * this.rush;
-    const fov = CAMERA.fov + CAMERA.speedFov * this.rush;
+    this.zoom += (this.zoomTarget - this.zoom) * (1 - Math.exp(-ZOOM_EASE * delta));
+    const distance =
+      (CAMERA.distance + CAMERA.speedDistance * this.rush) * this.zoom + this.zoomOffset;
+    const punch = this.shakeTime > 0 ? SHAKE_FOV * this.shakeStrength * (this.shakeTime / SHAKE_DURATION) ** 2 : 0;
+    const fov = CAMERA.fov + CAMERA.speedFov * this.rush + punch;
     if (Math.abs(this.camera.fov - fov) > 0.01) {
       this.camera.fov = fov;
       this.camera.updateProjectionMatrix();
@@ -160,5 +217,32 @@ export class ThirdPersonCamera {
 
     LOOK_TARGET.copy(this.followed).add(OFFSET.set(0, CAMERA.lookAtHeight, 0));
     this.camera.lookAt(LOOK_TARGET);
+
+    // Landing shake, applied after the camera is aimed:
+    //  - a DIP: the camera slams down and springs back, like the ground taking
+    //    the weight - the part that reads as impact;
+    //  - a fast jitter that dies away quadratically;
+    //  - a small roll kick and a brief field-of-view punch (above).
+    // Under half a second end to end, so it lands hard without lingering.
+    if (this.shakeTime > 0) {
+      this.shakeTime = Math.max(0, this.shakeTime - delta);
+      this.shakeClock += delta;
+      const decay = this.shakeTime / SHAKE_DURATION;
+      const progress = 1 - decay;
+      const strength = this.shakeStrength;
+      // Down fast in the first ~15%, then back up with a slight overshoot.
+      const dip =
+        progress < 0.15
+          ? -Math.sin((progress / 0.15) * (Math.PI / 2))
+          : -Math.cos(((progress - 0.15) / 0.85) * Math.PI * 1.5) * (1 - progress);
+      const jitter = SHAKE_AMPLITUDE * strength * decay * decay;
+      const c = this.shakeClock * SHAKE_FREQUENCY;
+      this.camera.position.x += Math.sin(c * 1.3) * jitter * 0.6;
+      this.camera.position.y += Math.sin(c + 0.7) * jitter + dip * SHAKE_DIP * strength;
+      this.camera.position.z += Math.cos(c * 0.9) * jitter * 0.35;
+      this.camera.rotateZ(Math.sin(c * 0.8) * SHAKE_ROLL * strength * decay);
+    } else {
+      this.shakeClock = 0;
+    }
   }
 }

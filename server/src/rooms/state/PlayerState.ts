@@ -34,7 +34,6 @@ export class PlayerState extends Schema {
   /** Monotonic counters, so remote clients derive one-shot animations. */
   @type('uint32') jumpCount = 0;
   @type('uint32') flipCount = 0;
-  @type('uint32') deathCount = 0;
 
   /** Belt underfoot, derived by the simulation from the server's own position. */
   @type('uint8') treadmill = 0;

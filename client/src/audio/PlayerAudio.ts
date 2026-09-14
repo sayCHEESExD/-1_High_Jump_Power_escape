@@ -10,18 +10,18 @@ export interface PlayerAudioInput {
   readonly maxRunSpeed: number;
   readonly isGrounded: boolean;
   readonly justLanded: boolean;
-  readonly isDying: boolean;
+  /** 0..1 strength of this frame's landing, 0 for none or a tiny drop. */
+  readonly landingImpact: number;
   readonly onActiveTreadmill: boolean;
 }
 
 /**
  * Decides WHEN the local player makes a sound; `AudioManager` knows HOW.
- * Only the local player is heard. Deaths fire on the edge, not the level.
+ * Only the local player is heard. There is no death sound - there is no death.
  */
 export class PlayerAudio {
   private stride = 0;
   private sinceStep = 0;
-  private wasDying = false;
 
   constructor(private readonly audio: AudioManager) {}
 
@@ -31,15 +31,11 @@ export class PlayerAudio {
   }
 
   update(delta: number, player: PlayerAudioInput): void {
-    if (player.isDying) {
-      if (!this.wasDying) this.audio.play('death');
-      this.wasDying = true;
-      this.stride = 0;
-      return;
+    // A real landing is a heavy impact; a small drop keeps the soft thud.
+    if (player.justLanded) {
+      if (player.landingImpact > 0) this.audio.play('impact', player.landingImpact);
+      else this.audio.play('land', 0.3);
     }
-    this.wasDying = false;
-
-    if (player.justLanded) this.audio.play('land', Math.min(player.horizontalSpeed / player.maxRunSpeed, 1));
 
     this.sinceStep += delta;
     const speed = player.onActiveTreadmill ? player.maxRunSpeed : player.horizontalSpeed;

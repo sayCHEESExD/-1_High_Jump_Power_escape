@@ -1,5 +1,6 @@
 import type { InputState } from './InputState.js';
 
+/** Movement and jump only. Shift is deliberately unbound: there is no sprint. */
 const KEY_BINDINGS: Readonly<Record<string, keyof BindingTargets>> = {
   KeyW: 'forward',
   ArrowUp: 'forward',
@@ -10,8 +11,6 @@ const KEY_BINDINGS: Readonly<Record<string, keyof BindingTargets>> = {
   KeyD: 'right',
   ArrowRight: 'right',
   Space: 'jump',
-  ShiftLeft: 'sprint',
-  ShiftRight: 'sprint',
 };
 
 interface BindingTargets {
@@ -20,7 +19,6 @@ interface BindingTargets {
   left: boolean;
   right: boolean;
   jump: boolean;
-  sprint: boolean;
 }
 
 /** Desktop keyboard input. One of possibly several sources feeding InputManager. */
@@ -31,7 +29,6 @@ export class KeyboardSource {
     left: false,
     right: false,
     jump: false,
-    sprint: false,
   };
 
   attach(): void {
@@ -53,7 +50,6 @@ export class KeyboardSource {
     if (this.held.right) state.moveX += 1;
     if (this.held.left) state.moveX -= 1;
     if (this.held.jump) state.jump = true;
-    if (this.held.sprint) state.sprint = true;
   }
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
@@ -78,6 +74,5 @@ export class KeyboardSource {
     this.held.left = false;
     this.held.right = false;
     this.held.jump = false;
-    this.held.sprint = false;
   };
 }

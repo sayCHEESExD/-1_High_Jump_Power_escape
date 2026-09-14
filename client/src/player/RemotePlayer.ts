@@ -1,6 +1,5 @@
-import { TRAINING, treadmillRate } from '@highjump/shared';
+import { TRAINING, bestOwnedBoot, treadmillRate } from '@highjump/shared';
 import { createAnimationInput, type AnimationInput } from '../animation/AnimationInput.js';
-import { DEATH } from '../config/animationConfig.js';
 import type { NetPlayerState } from '../net/netTypes.js';
 import { PlayerCharacter } from './PlayerCharacter.js';
 
@@ -34,15 +33,12 @@ export class RemotePlayer {
 
   private lastJumpCount: number;
   private lastFlipCount: number;
-  private lastDeathCount: number;
   private wasGrounded = true;
-  private deathTime = -1;
   private placed = false;
 
   constructor(state: NetPlayerState) {
     this.lastJumpCount = state.jumpCount;
     this.lastFlipCount = state.flipCount;
-    this.lastDeathCount = state.deathCount;
     this.apply(state);
     this.character.setPosition(this.targetX, this.targetY, this.targetZ);
     this.character.setYaw(this.targetYaw);
@@ -70,10 +66,8 @@ export class RemotePlayer {
     if (!this.wasGrounded && state.grounded) this.input.landed = true;
     this.wasGrounded = state.grounded;
 
-    if (state.deathCount > this.lastDeathCount) this.deathTime = 0;
-    this.lastDeathCount = state.deathCount;
-
     this.character.setCosmetics(state.trailSlot, state.auraSlot);
+    this.character.setBoots(bestOwnedBoot(state.ownedBoots)?.slot ?? 0);
   }
 
   update(delta: number): void {
@@ -94,12 +88,6 @@ export class RemotePlayer {
       const yaw = this.character.root.rotation.y;
       this.character.setYaw(yaw + shortestAngle(yaw, this.targetYaw) * alpha);
     }
-
-    if (this.deathTime >= 0) {
-      this.deathTime += dt;
-      if (this.deathTime > DEATH.duration) this.deathTime = -1;
-    }
-    this.input.dying = this.deathTime >= 0;
 
     this.character.update(dt, this.input);
     this.character.updateEffects(dt, this.input.horizontalSpeed);

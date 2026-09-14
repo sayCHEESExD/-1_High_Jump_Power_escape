@@ -17,6 +17,7 @@ import {
 } from 'three';
 import { PALETTE } from '../config/worldVisuals.js';
 import { CanvasSign, type SignLine } from './CanvasSign.js';
+import { FramedSign, SIGN_THEMES } from './FramedSign.js';
 
 /**
  * The Wins Shop: ten spring boots on pedestals, two rows of five down the
@@ -36,6 +37,7 @@ export class BootShop {
   private readonly padOpen: MeshLambertMaterial;
   private signature = '';
   private time = 0;
+  private readonly title: FramedSign;
 
   constructor() {
     const shoe = new BoxGeometry(0.9, 0.7, 1.5);
@@ -77,13 +79,11 @@ export class BootShop {
       this.signs.push(sign);
     }
 
-    const title = new CanvasSign(34, 7, [
-      { text: 'Wins Shop', size: 1, fill: '#ffe14d', stroke: '#5a3a00', strokeWidth: 0.2 },
-    ]);
-    title.mesh.position.set(HUB.halfWidth - 0.2, 17, BOOT_SHOP.firstZ + BOOT_SHOP.spacingZ * 2);
-    title.mesh.rotation.y = -Math.PI / 2;
-    this.root.add(title.mesh);
-    this.signs.push(title);
+    // The landmark: trophy in front of the name, gold frame, golden glow.
+    this.title = new FramedSign(38, 10, 'Wins Shop', '/ui/trophy.png', SIGN_THEMES.gold);
+    this.title.root.position.set(HUB.halfWidth - 0.35, 16.5, BOOT_SHOP.firstZ + BOOT_SHOP.spacingZ * 2);
+    this.title.root.rotation.y = -Math.PI / 2;
+    this.root.add(this.title.root);
   }
 
   setInventory(ownedBoots: number, wins: number): void {
@@ -100,6 +100,7 @@ export class BootShop {
 
   update(delta: number): void {
     this.time += delta;
+    this.title.update(delta);
     this.models.forEach((model, index) => {
       model.rotation.y = this.time * 0.9 + index;
       model.position.y = HUB.floorY + 1.2 + Math.sin(this.time * 2 + index) * 0.25;
@@ -130,6 +131,7 @@ export class BootShop {
     for (const geometry of this.geometries) geometry.dispose();
     for (const material of this.materials) material.dispose();
     for (const sign of this.signs) sign.dispose();
+    this.title.dispose();
     this.root.removeFromParent();
   }
 }

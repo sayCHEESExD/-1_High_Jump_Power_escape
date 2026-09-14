@@ -14,7 +14,7 @@ import type { Aabb } from '../types/math.js';
  * their LEFT is +X and their RIGHT is -X (the camera's right is -X at yaw 0).
  */
 
-export type SolidKind = 'hubFloor' | 'hubWall' | 'step' | 'winPad' | 'bootPad' | 'treadmill' | 'stall';
+export type SolidKind = 'hubFloor' | 'hubWall' | 'step' | 'pit' | 'winPad' | 'bootPad' | 'treadmill' | 'stall';
 
 export interface CourseSolid extends Aabb {
   readonly kind: SolidKind;
@@ -50,20 +50,24 @@ export interface BiomeDefinition {
  * jumps and equipment. Gaps appear from Crystal on; widths and depths narrow.
  */
 export const BIOMES: readonly BiomeDefinition[] = [
+  // Rise is the jump height a single jump needs (air jumps stack). Rough level
+  // needed with ONE jump: Grassland 1, Forest 7, Ocean 14, Crystal 25 (the
+  // first rebirth). From Desert on, rebirth jumps and equipment are expected:
+  // Desert ~L17 with 2 jumps, Snow Peak ~L25 with 3, Galaxy Core ~L47 with 9.
   { index: 1, name: 'Grassland', steps: 3, rise: 5, depth: 26, width: 64, gap: 0, wins: 1 },
-  { index: 2, name: 'Forest', steps: 3, rise: 9, depth: 26, width: 62, gap: 0, wins: 3 },
-  { index: 3, name: 'Ocean', steps: 3, rise: 14, depth: 24, width: 60, gap: 0, wins: 5 },
-  { index: 4, name: 'Crystal', steps: 3, rise: 20, depth: 24, width: 58, gap: 2, wins: 15 },
-  { index: 5, name: 'Desert', steps: 3, rise: 28, depth: 22, width: 56, gap: 3, wins: 25 },
-  { index: 6, name: 'High Mountain', steps: 3, rise: 38, depth: 22, width: 54, gap: 4, wins: 40 },
-  { index: 7, name: 'Snow Peak', steps: 3, rise: 50, depth: 22, width: 52, gap: 5, wins: 100 },
-  { index: 8, name: 'Volcano', steps: 3, rise: 65, depth: 20, width: 50, gap: 6, wins: 300 },
-  { index: 9, name: 'Cloud Kingdom', steps: 4, rise: 85, depth: 20, width: 48, gap: 6, wins: 1_000 },
-  { index: 10, name: 'Aurora Sky', steps: 4, rise: 110, depth: 20, width: 46, gap: 7, wins: 4_000 },
-  { index: 11, name: 'Candy Heaven', steps: 4, rise: 140, depth: 18, width: 44, gap: 7, wins: 20_000 },
-  { index: 12, name: 'Stratosphere', steps: 4, rise: 180, depth: 18, width: 42, gap: 8, wins: 120_000 },
-  { index: 13, name: 'Outer Space', steps: 4, rise: 230, depth: 18, width: 40, gap: 8, wins: 800_000 },
-  { index: 14, name: 'Galaxy Core', steps: 4, rise: 300, depth: 18, width: 38, gap: 8, wins: 10_000_000 },
+  { index: 2, name: 'Forest', steps: 3, rise: 18, depth: 26, width: 62, gap: 0, wins: 3 },
+  { index: 3, name: 'Ocean', steps: 3, rise: 32, depth: 24, width: 60, gap: 2, wins: 5 },
+  { index: 4, name: 'Crystal', steps: 3, rise: 52, depth: 24, width: 58, gap: 3, wins: 15 },
+  { index: 5, name: 'Desert', steps: 3, rise: 80, depth: 24, width: 56, gap: 4, wins: 25 },
+  { index: 6, name: 'High Mountain', steps: 3, rise: 115, depth: 22, width: 54, gap: 5, wins: 40 },
+  { index: 7, name: 'Snow Peak', steps: 3, rise: 160, depth: 22, width: 52, gap: 6, wins: 100 },
+  { index: 8, name: 'Volcano', steps: 3, rise: 215, depth: 22, width: 50, gap: 7, wins: 300 },
+  { index: 9, name: 'Cloud Kingdom', steps: 4, rise: 285, depth: 22, width: 48, gap: 8, wins: 1_000 },
+  { index: 10, name: 'Aurora Sky', steps: 4, rise: 370, depth: 22, width: 46, gap: 9, wins: 4_000 },
+  { index: 11, name: 'Candy Heaven', steps: 4, rise: 470, depth: 20, width: 44, gap: 10, wins: 20_000 },
+  { index: 12, name: 'Stratosphere', steps: 4, rise: 590, depth: 20, width: 42, gap: 11, wins: 120_000 },
+  { index: 13, name: 'Outer Space', steps: 4, rise: 730, depth: 20, width: 40, gap: 12, wins: 800_000 },
+  { index: 14, name: 'Galaxy Core', steps: 4, rise: 900, depth: 20, width: 38, gap: 12, wins: 10_000_000 },
 ];
 
 /** The step (1-based, within its biome) that carries the win pad. */
@@ -175,6 +179,49 @@ const buildSteps = (): StepDefinition[] => {
 
 export const STEPS: readonly StepDefinition[] = buildSteps();
 
+/**
+ * How far below the step before it a gap's floor sits.
+ *
+ * Every gap HAS a floor. Missing a jump is never punished with a respawn: the
+ * player drops into a shallow pit and jumps straight back out, onto the step
+ * they came from or at the step they missed.
+ */
+export const PIT_DEPTH = 6;
+
+/** Thickness of the column under a pit floor. */
+const PIT_SKIRT = 20;
+
+export interface PitDefinition {
+  readonly biome: number;
+  readonly minX: number;
+  readonly maxX: number;
+  readonly minZ: number;
+  readonly maxZ: number;
+  /** Top of the pit floor. */
+  readonly floor: number;
+}
+
+const buildPits = (): PitDefinition[] => {
+  const pits: PitDefinition[] = [];
+  for (let i = 1; i < STEPS.length; i += 1) {
+    const before = STEPS[i - 1] as StepDefinition;
+    const after = STEPS[i] as StepDefinition;
+    if (after.minZ - before.maxZ <= 1e-9) continue;
+    pits.push({
+      biome: after.biome,
+      // As wide as the step before it, which is what the side clamp uses in a gap.
+      minX: before.minX,
+      maxX: before.maxX,
+      minZ: before.maxZ,
+      maxZ: after.minZ,
+      floor: before.top - PIT_DEPTH,
+    });
+  }
+  return pits;
+};
+
+export const PITS: readonly PitDefinition[] = buildPits();
+
 const lastStep = STEPS[STEPS.length - 1] as StepDefinition;
 
 /** The far end of the world. */
@@ -233,6 +280,10 @@ const buildSolids = (): CourseSolid[] => {
     solids.push(
       box('step', step.biome, step.minX, step.maxX, step.bottom, step.top, step.minZ, step.maxZ),
     );
+  }
+
+  for (const pit of PITS) {
+    solids.push(box('pit', pit.biome, pit.minX, pit.maxX, pit.floor - PIT_SKIRT, pit.floor, pit.minZ, pit.maxZ));
   }
 
   for (const pad of WIN_PADS) {
@@ -310,12 +361,6 @@ export const halfWidthAt = (z: number): number => {
   const step = stepBehind(z);
   return step ? (step.maxX - step.minX) / 2 : HUB.halfWidth;
 };
-
-/**
- * The height a fall is measured against at `z`: the top of the step the
- * player last passed over, or the hub floor.
- */
-export const fallFloorAt = (z: number): number => stepBehind(z)?.top ?? HUB.floorY;
 
 /** The biome whose win pad the feet are on, or 0. */
 export const winPadAt = (x: number, y: number, z: number): number => {

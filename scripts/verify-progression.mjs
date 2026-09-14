@@ -55,6 +55,17 @@ check('level 16 = height 38', levelHeight(16) === 38);
 check('level 17 = height 40', levelHeight(17) === 40);
 check('each level adds 2 height', levelHeight(100) - levelHeight(99) === 2);
 check('equipment adds a percentage of height', Math.abs(resolveHeight(15, 10) - 39.6) < 1e-9);
+{
+  const near = (level, target) => Math.abs(energyForNextLevel(level, 0) - target) / target <= 0.05;
+  check(
+    'level costs match the reference: 22 = 1.98K, 23 = 2.45K, 24 = 2.9K, 25 = 3.5K (within 5%)',
+    near(22, 1980) && near(23, 2450) && near(24, 2900) && near(25, 3500),
+    [22, 23, 24, 25].map((l) => energyForNextLevel(l, 0)).join(', '),
+  );
+  const total = Array.from({ length: 24 }, (_, i) => energyForNextLevel(i + 1, 0)).reduce((a, b) => a + b, 0);
+  check('reaching level 25 takes well over 10K energy', total > 10_000, `${total}`);
+  check('the rebirth multiplier still scales the whole cost', energyForNextLevel(22, 1) === Math.round((30 * 22 + 1320) * 1.5));
+}
 check(
   'level cost rises every level',
   increasing(Array.from({ length: 200 }, (_, i) => energyForNextLevel(i + 1, 0))),

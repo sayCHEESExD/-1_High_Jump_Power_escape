@@ -7,18 +7,25 @@
 import { existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { BIOMES } from '../shared/dist/index.js';
 
 const assets = fileURLToPath(new URL('../assets', import.meta.url));
 
 const REQUIRED = [
+  // One picture per biome, named exactly after it (BiomeSign loads it by name).
+  ...BIOMES.map((biome) => `ui/${biome.name}.png`),
+  'audio/fall.mp3',
   'player/player.fbx',
   'player/green.png',
   'ui/trophy.png',
   'ui/rebirth.png',
   'ui/trail.png',
   'ui/aura.png',
-  'ui/run.png',
   'ui/shoe.png',
+  'ui/energy.png',
+  'ui/equipment.png',
+  'ui/inventory.png',
+  'ui/shop.png',
   'audio/background.mp3',
   'audio/jump.mp3',
 ];

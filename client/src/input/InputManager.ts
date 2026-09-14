@@ -76,7 +76,6 @@ export class InputManager {
     this.state.moveX = 0;
     this.state.moveZ = 0;
     this.state.jump = false;
-    this.state.sprint = false;
 
     this.keyboard.apply(this.state);
     // Additive, so a keyboard and a stick can be used at once on a hybrid
@@ -90,8 +89,7 @@ export class InputManager {
       this.state.moveX = 0;
       this.state.moveZ = 0;
       this.state.jump = false;
-      this.state.sprint = false;
-      return this.state;
+        return this.state;
     }
 
     // Normalise so diagonals are not faster than cardinals. The stick is

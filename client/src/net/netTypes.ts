@@ -23,7 +23,6 @@ export interface NetPlayerState {
   jumpsUsed: number;
   jumpCount: number;
   flipCount: number;
-  deathCount: number;
   treadmill: number;
 
   level: number;

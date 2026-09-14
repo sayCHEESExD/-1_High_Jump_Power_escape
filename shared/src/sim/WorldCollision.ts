@@ -4,7 +4,6 @@ import {
   HUB,
   STAIR_START_Z,
   bootPadAt,
-  fallFloorAt,
   halfWidthAt,
   inShopZone,
   winPadAt,
@@ -12,7 +11,7 @@ import {
 } from '../config/course.js';
 import { MOVEMENT } from '../config/movement.js';
 import { treadmillAt } from '../config/treadmills.js';
-import { BODY_HEIGHT, BODY_RADIUS, DEATH_PLANE_Y, FALL_MARGIN } from '../constants/world.js';
+import { BODY_HEIGHT, BODY_RADIUS, OUT_OF_WORLD_Y } from '../constants/world.js';
 
 /**
  * The gameplay shape of the world: what you can stand on, what stops you, and
@@ -37,7 +36,7 @@ const LANDING_TOLERANCE = MOVEMENT.stepHeight;
 const CEILING_TOLERANCE = 0.05;
 
 export interface CourseTriggers {
-  fell: boolean;
+  outOfWorld: boolean;
   treadmill: number;
   bootPad: number;
   winPad: number;
@@ -150,15 +149,17 @@ export class WorldCollision {
     out.x = x < -limit ? -limit : x > limit ? limit : x;
   }
 
-  /** True once the player has dropped well below where they could have stood. */
-  hasFallen(y: number, z: number): boolean {
-    if (y <= DEATH_PLANE_Y) return true;
-    return y < fallFloorAt(z) - FALL_MARGIN;
+  /**
+   * True only if the player is outside the world altogether - a glitch safety
+   * net, never a consequence of missing a jump (every gap has a floor).
+   */
+  isOutOfWorld(y: number): boolean {
+    return y <= OUT_OF_WORLD_Y;
   }
 
   sampleTriggers(x: number, y: number, z: number): CourseTriggers {
     return {
-      fell: this.hasFallen(y, z),
+      outOfWorld: this.isOutOfWorld(y),
       treadmill: treadmillAt(x, y, z),
       bootPad: bootPadAt(x, y, z),
       winPad: winPadAt(x, y, z),

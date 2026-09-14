@@ -2,9 +2,9 @@ import { Group, Vector3 } from 'three';
 import {
   AIRBORNE,
   BACKFLIP_ANIM,
-  DEATH,
   FLIP_PIVOT_HEIGHT,
   IDLE,
+  JUMP_ANIMATION,
   JUMP_START,
   LANDING,
   LOCOMOTION,
@@ -19,17 +19,11 @@ import type { PlayerRig } from './rig/PlayerRig.js';
 
 /** Negative rotation about the character's right axis takes the head backward. */
 const FLIP_AXIS = new Vector3(1, 0, 0);
-/** The death tip-over turns about the character's forward axis. */
-const TIP_AXIS = new Vector3(0, 0, 1);
 
-export type AnimationState =
-  | 'idle'
-  | 'run'
-  | 'jumpStart'
-  | 'airborne'
-  | 'backflip'
-  | 'landing'
-  | 'dying';
+export type AnimationState = 'idle' | 'run' | 'jumpStart' | 'airborne' | 'backflip' | 'landing';
+
+/** The states that make up "the jump", played at `JUMP_ANIMATION.playbackRate`. */
+const JUMP_STATES: ReadonlySet<AnimationState> = new Set(['jumpStart', 'airborne', 'backflip', 'landing']);
 
 const clamp = (value: number, min: number, max: number): number =>
   value < min ? min : value > max ? max : value;
@@ -37,14 +31,15 @@ const clamp = (value: number, min: number, max: number): number =>
 const ease = (t: number): number => t * t * (3 - 2 * t);
 
 /**
- * The player animation state machine: run, jump, backflip (air jumps), land and
- * the death fall-over.
+ * The player animation state machine: run, jump, backflip (air jumps) and land.
+ * There is no death animation - a fall simply returns the player to spawn.
  *
- * Writes ONLY to bones (via `PlayerRig`), the flip pivot, the tip pivot and the
- * visual bob node. It never touches the physics root.
+ * Writes ONLY to bones (via `PlayerRig`), the flip pivot and the visual bob
+ * node. It never touches the physics root.
  *
- * Each state writes a full pose into a buffer and transitions lerp from a
- * snapshot of what was on screen, so any two states cross-fade.
+ * The jump states run on a scaled clock (`JUMP_ANIMATION.playbackRate`): their
+ * timers, cross-fades, flip rotation and rise/fall blend all advance slower,
+ * while the physics that moves the player is unchanged.
  */
 export class PlayerAnimator {
   private readonly locomotion = new LocomotionCycle();
@@ -60,7 +55,8 @@ export class PlayerAnimator {
   private blendDuration = 0;
   private idleTime = 0;
   private wasGrounded = true;
-  private deathTime = -1;
+  /** Eased rise (1) / fall (0) weight for the airborne pose. */
+  private airWeight = 1;
 
   constructor(
     private readonly rig: PlayerRig,
@@ -82,8 +78,8 @@ export class PlayerAnimator {
     this.state = 'idle';
     this.stateTime = 0;
     this.blendDuration = 0;
-    this.deathTime = -1;
     this.wasGrounded = true;
+    this.airWeight = 1;
     this.target.reset();
     this.from.reset();
     this.output.reset();
@@ -95,22 +91,15 @@ export class PlayerAnimator {
 
   update(delta: number, input: AnimationInput): void {
     const dt = Math.max(0, delta);
-    this.stateTime += dt;
-    const flipFinished = this.backflip.update(dt);
-    this.resolveState(dt, input, flipFinished);
-    this.writePose(dt, input);
-    this.apply(dt);
+    const jumpDt = dt * JUMP_ANIMATION.playbackRate;
+    this.stateTime += JUMP_STATES.has(this.state) ? jumpDt : dt;
+    const flipFinished = this.backflip.update(jumpDt);
+    this.resolveState(input, flipFinished);
+    this.writePose(dt, jumpDt, input);
+    this.apply(JUMP_STATES.has(this.state) ? jumpDt : dt);
   }
 
-  private resolveState(delta: number, input: AnimationInput, flipFinished: boolean): void {
-    if (input.dying) {
-      this.deathTime = this.deathTime < 0 ? 0 : this.deathTime + delta;
-      if (this.backflip.isFlipping) this.backflip.abort();
-      this.setState('dying', TRANSITIONS.toDying);
-      return;
-    }
-    this.deathTime = -1;
-
+  private resolveState(input: AnimationInput, flipFinished: boolean): void {
     if (input.landed || (input.grounded && !this.wasGrounded)) {
       if (this.backflip.isFlipping) this.backflip.abort();
       this.wasGrounded = true;
@@ -125,6 +114,7 @@ export class PlayerAnimator {
       return;
     }
     if (input.jumpStarted) {
+      this.airWeight = 1;
       this.setState('jumpStart', TRANSITIONS.toJumpStart);
       return;
     }
@@ -152,11 +142,11 @@ export class PlayerAnimator {
     this.blendDuration = duration;
   }
 
-  private writePose(delta: number, input: AnimationInput): void {
+  private writePose(dt: number, jumpDt: number, input: AnimationInput): void {
     switch (this.state) {
       case 'idle': {
-        this.locomotion.settleTowardNeutral(delta);
-        this.idleTime += delta;
+        this.locomotion.settleTowardNeutral(dt);
+        this.idleTime += dt;
         const breath = Math.sin(this.idleTime * IDLE.breathFrequency * Math.PI * 2);
         this.target.applyDefinition(IDLE.basePose);
         this.target.add('Spine1', breath * IDLE.breathAmount);
@@ -165,7 +155,7 @@ export class PlayerAnimator {
         break;
       }
       case 'run':
-        this.locomotion.advance(delta, input.horizontalSpeed);
+        this.locomotion.advance(dt, input.horizontalSpeed);
         this.locomotion.writePose(this.target, input.horizontalSpeed);
         break;
       case 'jumpStart':
@@ -173,7 +163,7 @@ export class PlayerAnimator {
         this.target.bobY = JUMP_START.bobY;
         break;
       case 'airborne':
-        this.writeAirborne(input.verticalVelocity);
+        this.writeAirborne(jumpDt, input.verticalVelocity);
         break;
       case 'landing': {
         const depth = 1 - ease(clamp(this.stateTime / LANDING.duration, 0, 1));
@@ -183,7 +173,7 @@ export class PlayerAnimator {
       }
       case 'backflip': {
         const tuck = this.backflip.tuckAmount;
-        this.writeAirborne(input.verticalVelocity);
+        this.writeAirborne(jumpDt, input.verticalVelocity);
         this.target.blendInDefinition(BACKFLIP_ANIM.tuckPose, tuck);
         const asymmetry = BACKFLIP_ANIM.tuckAsymmetry * tuck;
         this.target.add('LegL1', asymmetry);
@@ -192,32 +182,24 @@ export class PlayerAnimator {
         if (!this.backflip.isFlipping) this.setState('airborne', TRANSITIONS.toAirborne);
         break;
       }
-      case 'dying': {
-        const t = clamp(this.deathTime / DEATH.duration, 0, 1);
-        this.target.reset();
-        this.target.add('Spine1', DEATH.pitch * 0.6, 0, DEATH.roll * 0.12);
-        this.target.add('Neck1', -DEATH.pitch * 0.4);
-        this.target.add('ArmL1', -DEATH.splay * 1.4, 0, -DEATH.splay);
-        this.target.add('ArmR1', -DEATH.splay * 1.2, 0, DEATH.splay);
-        this.target.add('LegL1', -DEATH.splay * 0.5, DEATH.splay * 0.4);
-        this.target.add('LegR1', -DEATH.splay * 0.3, -DEATH.splay * 0.4);
-        this.target.bobY = -DEATH.drop * t;
-        break;
-      }
     }
   }
 
-  private writeAirborne(verticalVelocity: number): void {
+  private writeAirborne(jumpDt: number, verticalVelocity: number): void {
     const t = clamp(verticalVelocity / AIRBORNE.velocityReference, -1, 1);
-    const rise = (t + 1) * 0.5;
-    this.target.applyDefinition(AIRBORNE.fall, 1 - rise);
-    this.target.blendInDefinition(AIRBORNE.rise, rise);
+    const targetWeight = (t + 1) * 0.5;
+    // Eased on the jump clock, so the arms and legs swing from the rising pose
+    // to the falling one at the slowed playback rate rather than snapping with
+    // the velocity.
+    this.airWeight += (targetWeight - this.airWeight) * (1 - Math.exp(-JUMP_ANIMATION.airBlendRate * jumpDt));
+    this.target.applyDefinition(AIRBORNE.fall, 1 - this.airWeight);
+    this.target.blendInDefinition(AIRBORNE.rise, this.airWeight);
     this.target.bobY = 0;
   }
 
-  private apply(delta: number): void {
+  private apply(blendDt: number): void {
     if (this.blendDuration > 0) {
-      this.blendTime += delta;
+      this.blendTime += blendDt;
       const t = clamp(this.blendTime / this.blendDuration, 0, 1);
       this.output.lerpBetween(this.from, this.target, ease(t));
       if (t >= 1) this.blendDuration = 0;
@@ -226,10 +208,8 @@ export class PlayerAnimator {
     }
 
     this.rig.applyPose(this.output);
-    // Rebuilt from scalars every frame, so neither pivot can drift.
+    // Rebuilt from a scalar every frame, so the pivot can never drift.
     this.flipPivot.quaternion.setFromAxisAngle(FLIP_AXIS, -this.backflip.rotationAngle);
-    const death = this.deathTime < 0 ? 0 : clamp(this.deathTime / DEATH.duration, 0, 1);
-    this.tipPivot.quaternion.setFromAxisAngle(TIP_AXIS, DEATH.roll * ease(death));
     this.visual.position.y = -FLIP_PIVOT_HEIGHT + this.output.bobY;
   }
 }

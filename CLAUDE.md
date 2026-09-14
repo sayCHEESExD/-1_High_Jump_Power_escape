@@ -51,12 +51,31 @@ and the world is a **staircase** climbing along +Z through 14 biomes.
   before the staircase, win pads on the left of each biome's 3rd step.
 - The hub's front wall is a **solid**, so the side clamp can switch from hub width to
   staircase width at the mouth without shoving anyone sideways.
-- A fall is `y < fallFloorAt(z) - FALL_MARGIN`, measured against the step last passed
-  over. Hopping back down a step is safe; dropping into a gap is lethal.
+- **Missing a jump has NO consequence beyond the drop.** Every gap has a floor (`PITS`,
+  `PIT_DEPTH` below the step before it), the sides are clamped, and nothing sends a player
+  to spawn for falling. There is no death mechanic, animation, sound or counter.
+- The only non-voluntary placement is `isOutOfWorld` (`y <= OUT_OF_WORLD_Y`), a safety
+  net for glitches that normal play cannot reach. Do not reintroduce a fall rule.
 - **There are no checkpoints.** `GameRoom.placeAt` takes no position: join, fall, win and
   rebirth all land at `SPAWN_POSITION`.
+- **There is no sprint.** `MOVEMENT.moveSpeed` is the only ground speed; Shift is unbound
+  and neither the input state nor `MoveMessage` carries a sprint flag.
+- The jump animations (crouch, airborne, backflip, landing) play at
+  `JUMP_ANIMATION.playbackRate` (0.5). That scales only the animator's clock, never physics.
+- The landing impact (rubble + dust ring in `LandingDebris`, `impact` sound, camera
+  `shake`) is LOCAL presentation for the local player only. `LocalPlayer.landingImpact`
+  reads the touchdown fall speed relative to the player's own jump velocity; it never
+  writes motion, so jump physics is unchanged.
+- Spring boots (`SpringBoots`) hang off the lower leg bones; while worn, `PlayerCharacter`
+  lifts the body by `SPRING_LIFT` so the springs reach the ground.
 - World textures are drawn on canvases (`WorldTextures`). The only image files are the
-  supplied player texture and the HUD icons in `assets/ui/`.
+  supplied player texture, the HUD icons in `assets/ui/`, and one picture per biome in
+  `assets/ui/` named exactly after the biome (`Snow Peak.png`), drawn on its `BiomeSign`.
+- The landing impact sound is `assets/audio/fall.mp3`.
+- Biome boards hang at one fixed spot per biome (`biomeSignLayout.ts`). Scenery must call
+  `blocksBiomeSign` and stay out of that sightline; never place decor in front of a board.
+- A win plays `TrophyBurst`: local 3D trophy sprites popping around the player, following
+  them through the return to spawn. There is no screen-space trophy flight.
 
 ## Progression
 

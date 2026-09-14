@@ -227,10 +227,11 @@ export class GameRoom extends Room<GameState> {
     for (const [sessionId, player] of this.state.players) {
       player.playSeconds += delta;
       if (!player.ready) continue;
-      // Falls are decided HERE, from the position the server simulated.
-      if (this.movement.collision.hasFallen(player.y, player.z)) {
+      // Missing a jump never moves anyone - gaps have floors. This only rescues
+      // a player a glitch has left outside the world entirely.
+      if (this.movement.collision.isOutOfWorld(player.y)) {
         const client = this.clients.find((c) => c.sessionId === sessionId);
-        if (client) this.respawn(client, 'fell');
+        if (client) this.respawn(client, 'outOfWorld');
       }
     }
 
@@ -270,7 +271,6 @@ export class GameRoom extends Room<GameState> {
       SPAWN_ROTATION_Y,
     );
     this.energy.reset(client.sessionId, player);
-    if (reason === 'fell') player.deathCount += 1;
 
     const message: RespawnMessage = {
       x: SPAWN_POSITION.x,

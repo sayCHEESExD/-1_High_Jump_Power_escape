@@ -11,6 +11,7 @@ import {
 } from 'three';
 import { PALETTE } from '../config/worldVisuals.js';
 import { CanvasSign, type SignLine } from './CanvasSign.js';
+import { FramedSign, SIGN_THEMES } from './FramedSign.js';
 import { texturedBox } from './texturedBox.js';
 import type { WorldTextures } from './WorldTextures.js';
 
@@ -33,6 +34,7 @@ export class TrainingArea {
   private readonly beltTexture: Texture;
   private rebirths = -1;
   private time = 0;
+  private readonly title: FramedSign;
 
   constructor(textures: WorldTextures) {
     const frame = this.lambert(PALETTE.treadmillFrame);
@@ -86,12 +88,10 @@ export class TrainingArea {
       this.root.add(machine);
     });
 
-    const title = new CanvasSign(44, 8, [
-      { text: 'High Training', size: 1, fill: '#ff5ff0', stroke: '#3a0a4a', strokeWidth: 0.2 },
-    ]);
-    title.mesh.position.set(0, 19, HUB.minZ + 0.2);
-    this.root.add(title.mesh);
-    this.signs.push(title);
+    // Same landmark style as the Wins Shop, in purple with the energy icon.
+    this.title = new FramedSign(44, 10, 'High Training', '/ui/energy.png', SIGN_THEMES.purple);
+    this.title.root.position.set(0, 18.5, HUB.minZ + 0.35);
+    this.root.add(this.title.root);
     this.setRebirths(0);
   }
 
@@ -104,6 +104,7 @@ export class TrainingArea {
 
   update(delta: number): void {
     this.time += delta;
+    this.title.update(delta);
     // The belt travels toward the back of the machine, under a runner facing it.
     this.beltTexture.offset.y = (this.time * BELT_SCROLL) % 1;
   }
@@ -153,6 +154,7 @@ export class TrainingArea {
     for (const geometry of this.geometries) geometry.dispose();
     for (const material of this.materials) material.dispose();
     for (const sign of this.signs) sign.dispose();
+    this.title.dispose();
     this.beltTexture.dispose();
     this.root.removeFromParent();
   }

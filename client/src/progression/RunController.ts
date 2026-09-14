@@ -35,11 +35,13 @@ export class RunController {
   update(delta: number, player: LocalPlayer): void {
     this.winCooldown = Math.max(0, this.winCooldown - delta);
     this.bootCooldown = Math.max(0, this.bootCooldown - delta);
-    if (player.isDying) return;
+    if (player.isReturning) return;
 
     const { x, y, z } = player.position;
-    if (this.collision.hasFallen(y, z)) {
-      player.beginDeath();
+    // Missing a jump does nothing special: the player lands in the pit under the
+    // gap and climbs out. Only a glitch outside the world waits for a placement.
+    if (this.collision.isOutOfWorld(y)) {
+      player.beginFallReturn();
       this.setShop(false);
       return;
     }

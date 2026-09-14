@@ -11,7 +11,7 @@ export class KeyHints {
     const hints: [string, string][] = [
       ['WASD', 'Move'],
       ['Space', 'Jump (again in air: backflip)'],
-      ['Shift', 'Sprint'],
+      ['Wheel', 'Zoom'],
       ['Esc', 'Free cursor'],
     ];
     for (const [key, label] of hints) {

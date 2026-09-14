@@ -5,12 +5,10 @@ export interface InputState {
   /** -1 (back) .. 1 (forward), camera-relative. */
   moveZ: number;
   jump: boolean;
-  sprint: boolean;
 }
 
 export const createInputState = (): InputState => ({
   moveX: 0,
   moveZ: 0,
   jump: false,
-  sprint: false,
 });

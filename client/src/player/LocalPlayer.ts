@@ -15,7 +15,6 @@ import {
 } from '@highjump/shared';
 import { Vector3 } from 'three';
 import { createAnimationInput, type AnimationInput } from '../animation/AnimationInput.js';
-import { DEATH } from '../config/animationConfig.js';
 import type { InputState } from '../input/InputState.js';
 import { PlayerCharacter } from './PlayerCharacter.js';
 
@@ -24,11 +23,15 @@ const MAX_PENDING_INPUTS = 240;
 const FIXED_DT = 1 / 60;
 const MAX_STEPS_PER_FRAME = 5;
 const ARRIVE_DURATION = 0.16;
-/** Failsafe: stop ignoring server state if a predicted death is never confirmed. */
-const RESPAWN_ACK_TIMEOUT = 1.5;
-/** A finished death that nobody placed asks again this often. */
-const RESPAWN_NUDGE_INTERVAL = 0.75;
+/** Failsafe: stop ignoring server state if a predicted fall is never confirmed. */
+const RETURN_ACK_TIMEOUT = 1.5;
+/** An unconfirmed fall asks the server again this often. */
+const RETURN_NUDGE_INTERVAL = 0.75;
 const SNAP_DISTANCE = 6;
+/** Falls slower than this at touchdown (stepping off a deck or pad) are not impacts. */
+const MIN_IMPACT_SPEED = 10;
+/** Touchdown speed, as a multiple of jump velocity, that counts as a full-strength impact. */
+const IMPACT_FULL_FACTOR = 1.25;
 const CORRECTION_RATE = 14;
 
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
@@ -66,6 +69,9 @@ export interface AuthoritativeMotion {
  * Runs the identical `stepPlayer`, keeps every unacknowledged input, and on each
  * server update snaps to the authoritative motion and replays the rest. Nothing
  * here sends a transform - only the input that produced this frame.
+ *
+ * There is no death and no fall penalty: a missed jump lands in the pit under
+ * the gap. Only a player a glitch leaves outside the world is placed at spawn.
  */
 export class LocalPlayer {
   readonly character = new PlayerCharacter();
@@ -85,14 +91,20 @@ export class LocalPlayer {
   private accumulator = 0;
   private readonly correction = new Vector3();
   private placement: PlacementKind = 'none';
-
-  private deathTime = -1;
   private arriveTime = -1;
-  private awaitingRespawn = false;
-  private respawnWait = 0;
-  private stuckTime = -1;
+
+  /**
+   * True from noticing a fall until the server places the player. State
+   * patches in flight still describe them mid-fall, so reconciliation is
+   * paused rather than letting a stale patch drag them back into the gap.
+   */
+  private returning = false;
+  private returnWait = 0;
+  private nudgeWait = 0;
 
   private readonly animationInput: AnimationInput = createAnimationInput();
+  /** This frame's landing impact, 0..1. See `landingImpact`. */
+  private impact = 0;
 
   constructor(private readonly collision: WorldCollision) {
     this.previous.x = this.motion.x;
@@ -113,16 +125,20 @@ export class LocalPlayer {
   get justLanded(): boolean {
     return this.events.landed;
   }
-  get justJumped(): boolean {
-    return this.events.jumpStarted || this.events.airJumped;
+  /**
+   * How hard the player hit the ground this frame, 0..1, or 0 when there was
+   * no real landing. Measured against the player's OWN jump speed, so a full
+   * jump lands hard at every level and a hop off a small ledge barely registers.
+   */
+  get landingImpact(): number {
+    return this.impact;
   }
   /** Which jump, if any, started this frame - an air jump is a backflip. */
   get jumpKind(): 'none' | 'ground' | 'air' {
-    if (this.deathTime >= 0) return 'none';
     return this.events.airJumped ? 'air' : this.events.jumpStarted ? 'ground' : 'none';
   }
   get maxRunSpeed(): number {
-    return MOVEMENT.runSpeed;
+    return MOVEMENT.moveSpeed;
   }
   get jumpsLeft(): number {
     return this.motion.grounded ? this.params.maxJumps : Math.max(0, this.params.maxJumps - this.motion.jumpsUsed);
@@ -131,11 +147,9 @@ export class LocalPlayer {
   get onActiveTreadmill(): boolean {
     return this.motion.treadmill > 0 && treadmillRate(this.motion.treadmill, this.rebirths) > 0;
   }
-  get isDying(): boolean {
-    return this.deathTime >= 0;
-  }
-  get deathComplete(): boolean {
-    return this.deathTime >= DEATH.duration;
+  /** True while waiting for the server to bring a fallen player back to spawn. */
+  get isReturning(): boolean {
+    return this.returning;
   }
 
   /** The server-resolved jump physics this player simulates with. */
@@ -159,15 +173,19 @@ export class LocalPlayer {
     return kind;
   }
 
+  /** True once per interval while a fall is still waiting for a placement. */
   consumeRespawnNudge(): boolean {
-    if (this.stuckTime < RESPAWN_NUDGE_INTERVAL) return false;
-    this.stuckTime = 0;
+    if (!this.returning || this.nudgeWait < RETURN_NUDGE_INTERVAL) return false;
+    this.nudgeWait = 0;
     return true;
   }
 
-  acknowledgeRespawn(): void {
-    this.awaitingRespawn = false;
-    this.respawnWait = 0;
+  /** Out of the world (a glitch safety net). No animation, no sound: just wait for spawn. */
+  beginFallReturn(): void {
+    if (this.returning) return;
+    this.returning = true;
+    this.returnWait = 0;
+    this.nudgeWait = 0;
   }
 
   /** A server placement: pending inputs described a run that no longer exists. */
@@ -181,33 +199,15 @@ export class LocalPlayer {
     this.accumulator = 0;
     this.correction.set(0, 0, 0);
     this.placement = 'respawn';
-    this.deathTime = -1;
-    this.stuckTime = -1;
+    this.returning = false;
     this.arriveTime = 0;
     this.character.resetAnimation();
     this.character.setVisualScale(0.15, 0.15, 0.15);
     this.syncFromMotion();
   }
 
-  /** Start the local fall-over; the server confirms with a Respawn. */
-  beginDeath(): void {
-    if (this.deathTime >= 0) return;
-    this.deathTime = 0;
-    this.arriveTime = -1;
-    this.awaitingRespawn = true;
-    this.respawnWait = 0;
-    this.stuckTime = -1;
-    this.pending.length = 0;
-    this.outgoing.length = 0;
-    this.correction.set(0, 0, 0);
-    this.accumulator = 0;
-    this.motion.vx = 0;
-    this.motion.vy = 0;
-    this.motion.vz = 0;
-  }
-
   reconcile(state: AuthoritativeMotion): void {
-    if (this.awaitingRespawn) return;
+    if (this.returning) return;
 
     const px = this.motion.x;
     const py = this.motion.y;
@@ -253,23 +253,14 @@ export class LocalPlayer {
   }
 
   update(delta: number, input: Readonly<InputState>, cameraYaw: number): void {
-    this.tickRespawnBarrier(delta);
-
-    if (this.deathTime >= 0) {
-      this.deathTime += delta;
-      if (this.deathTime >= DEATH.duration) {
-        this.stuckTime = this.stuckTime < 0 ? 0 : this.stuckTime + delta;
-      }
-      this.emitIdleInputs(delta);
-      this.updateAnimation(delta, true);
-      return;
-    }
+    this.tickReturn(delta);
 
     this.accumulator += Math.max(0, delta);
     let steps = 0;
     let jumpStarted = false;
     let airJumped = false;
     let landed = false;
+    let impactSpeed = 0;
 
     while (this.accumulator >= FIXED_DT && steps < MAX_STEPS_PER_FRAME) {
       this.accumulator -= FIXED_DT;
@@ -278,7 +269,6 @@ export class LocalPlayer {
         moveX: input.moveX,
         moveZ: input.moveZ,
         jump: input.jump,
-        sprint: input.sprint,
         cameraYaw,
       };
       const seq = this.nextSeq;
@@ -287,10 +277,14 @@ export class LocalPlayer {
       this.previous.y = this.motion.y;
       this.previous.z = this.motion.z;
 
+      const fallSpeed = -this.motion.vy;
       stepPlayer(this.motion, movement, this.params, FIXED_DT, this.collision, this.events);
       jumpStarted = jumpStarted || this.events.jumpStarted;
       airJumped = airJumped || this.events.airJumped;
       landed = landed || this.events.landed;
+      // The speed the player was falling at on the step they touched down -
+      // read, never written, so the physics is untouched.
+      if (this.events.landed) impactSpeed = Math.max(impactSpeed, fallSpeed);
 
       this.pending.push({ seq, dt: FIXED_DT, input: movement });
       if (this.pending.length > MAX_PENDING_INPUTS) this.pending.shift();
@@ -301,12 +295,16 @@ export class LocalPlayer {
     this.events.jumpStarted = jumpStarted;
     this.events.airJumped = airJumped;
     this.events.landed = landed;
+    this.impact =
+      landed && impactSpeed >= MIN_IMPACT_SPEED
+        ? Math.min(1, impactSpeed / (this.params.jumpVelocity * IMPACT_FULL_FACTOR))
+        : 0;
 
     this.advanceArrival(delta);
     if (this.correction.lengthSq() < 1e-8) this.correction.set(0, 0, 0);
     else this.correction.multiplyScalar(Math.exp(-CORRECTION_RATE * delta));
     this.syncFromMotion();
-    this.updateAnimation(delta, false);
+    this.updateAnimation(delta);
   }
 
   private advanceArrival(delta: number): void {
@@ -322,33 +320,14 @@ export class LocalPlayer {
     this.character.setVisualScale(scale, scale, scale);
   }
 
-  /** While dead the server still needs inputs to confirm the fall. */
-  private emitIdleInputs(delta: number): void {
-    this.accumulator += Math.max(0, delta);
-    let steps = 0;
-    while (this.accumulator >= FIXED_DT && steps < MAX_STEPS_PER_FRAME) {
-      this.accumulator -= FIXED_DT;
-      steps += 1;
-      this.outgoing.push({
-        seq: this.nextSeq,
-        dt: FIXED_DT,
-        moveX: 0,
-        moveZ: 0,
-        jump: false,
-        sprint: false,
-        cameraYaw: this.motion.yaw,
-      });
-      this.nextSeq += 1;
-    }
-    if (this.accumulator > FIXED_DT * MAX_STEPS_PER_FRAME) this.accumulator = 0;
-  }
-
-  private tickRespawnBarrier(delta: number): void {
-    if (!this.awaitingRespawn) return;
-    this.respawnWait += delta;
-    if (this.respawnWait < RESPAWN_ACK_TIMEOUT) return;
-    this.awaitingRespawn = false;
-    this.respawnWait = 0;
+  private tickReturn(delta: number): void {
+    if (!this.returning) return;
+    this.returnWait += delta;
+    this.nudgeWait += delta;
+    if (this.returnWait < RETURN_ACK_TIMEOUT) return;
+    // No placement came: the prediction was wrong, so let the server correct it.
+    this.returning = false;
+    this.returnWait = 0;
   }
 
   private syncFromMotion(): void {
@@ -362,16 +341,15 @@ export class LocalPlayer {
     this.character.setYaw(this.motion.yaw);
   }
 
-  private updateAnimation(delta: number, dying: boolean): void {
+  private updateAnimation(delta: number): void {
     const input = this.animationInput;
     input.grounded = this.motion.grounded;
     input.horizontalSpeed = this.onActiveTreadmill ? TRAINING.beltSpeed : this.horizontalSpeed;
     input.verticalVelocity = this.motion.vy;
-    input.jumpStarted = !dying && this.events.jumpStarted;
-    input.airJumped = !dying && this.events.airJumped;
-    input.landed = !dying && this.events.landed;
-    input.dying = dying;
+    input.jumpStarted = this.events.jumpStarted;
+    input.airJumped = this.events.airJumped;
+    input.landed = this.events.landed;
     this.character.update(delta, input);
-    this.character.updateEffects(delta, dying ? 0 : input.horizontalSpeed);
+    this.character.updateEffects(delta, input.horizontalSpeed);
   }
 }

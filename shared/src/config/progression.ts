@@ -18,9 +18,18 @@ export const ENERGY = {
   jumpBonusSteps: 2,
   /** Anti-teleport slack on the per-step distance the server will credit. */
   creditSlack: 1.6,
-  /** Level cost is `costBase * level ^ costExponent * rebirthCostMultiplier`. */
-  costBase: 2.7,
-  costExponent: 1.6,
+  /**
+   * Level cost is
+   * `(costPerLevel * L + costPivotEnergy * (L / costPivotLevel) ^ costExponent) * rebirthCostMultiplier`.
+   *
+   * The linear term keeps the first levels from flashing past; the steep power
+   * term takes over in the 20s and makes later levels a real grind. Tuned to the
+   * reference: level 22 = 1.98K, 23 = 2.4K, 24 = 2.9K, 25 = 3.5K at rebirth 0.
+   */
+  costPerLevel: 30,
+  costPivotLevel: 22,
+  costPivotEnergy: 1320,
+  costExponent: 5.74,
   /** Energy per step with no boots at all. */
   baseEnergyPerStep: 1,
 } as const;
@@ -50,10 +59,10 @@ export const levelHeight = (level: number): number =>
 /** Energy needed to go from `level` to the next one. */
 export const energyForNextLevel = (level: number, rebirths: number): number => {
   const at = Math.max(1, Math.floor(level));
-  return Math.max(
-    1,
-    Math.round(ENERGY.costBase * at ** ENERGY.costExponent * rebirthCostMultiplier(rebirths)),
-  );
+  const base =
+    ENERGY.costPerLevel * at +
+    ENERGY.costPivotEnergy * (at / ENERGY.costPivotLevel) ** ENERGY.costExponent;
+  return Math.max(1, Math.round(base * rebirthCostMultiplier(rebirths)));
 };
 
 export interface LevelState {

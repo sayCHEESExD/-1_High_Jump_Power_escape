@@ -2,11 +2,10 @@ import {
   AURA_TIERS,
   MessageType,
   TRAIL_TIERS,
+  bestOwnedBoot,
   formatNumber,
-  type RespawnMessage,
   type WinAwardedMessage,
 } from '@highjump/shared';
-import { Vector3 } from 'three';
 import { AudioManager } from '../audio/AudioManager.js';
 import { PlayerAudio } from '../audio/PlayerAudio.js';
 import { ThirdPersonCamera } from '../camera/ThirdPersonCamera.js';
@@ -18,6 +17,7 @@ import { LocalPlayer } from '../player/LocalPlayer.js';
 import { playerModelLoader } from '../player/PlayerModelLoader.js';
 import { RemotePlayerManager } from '../player/RemotePlayerManager.js';
 import { RunController } from '../progression/RunController.js';
+import { LandingDebris } from '../rendering/LandingDebris.js';
 import { RendererManager } from '../rendering/RendererManager.js';
 import { SceneManager } from '../rendering/SceneManager.js';
 import { BackpackPanel } from '../ui/BackpackPanel.js';
@@ -30,10 +30,11 @@ import { KeyHints, WinBanner } from '../ui/Overlays.js';
 import { Panel, anyPanelOpen } from '../ui/Panel.js';
 import { RailButton } from '../ui/RailButton.js';
 import { RebirthPanel } from '../ui/RebirthPanel.js';
-import { WinFlight } from '../ui/WinFlight.js';
+import { TrophyBurst } from '../rendering/TrophyBurst.js';
 import { WinsCounter } from '../ui/WinsCounter.js';
 import { logger } from '../util/logger.js';
 import { CourseWorld } from '../world/CourseWorld.js';
+import { Shopkeeper } from '../world/Shopkeeper.js';
 
 const SCOPE = 'Game';
 
@@ -51,7 +52,6 @@ const isTyping = (target: EventTarget | null): boolean => {
   return element.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName);
 };
 
-const FLIGHT_ORIGIN = new Vector3();
 
 /**
  * Composition root. Owns every subsystem and the per-frame order - input,
@@ -69,11 +69,16 @@ export class Game {
   private readonly playerAudio: PlayerAudio;
   private readonly network: NetworkClient;
   private readonly run: RunController;
+  /** The local player's landing rubble. Presentation only, never replicated. */
+  private readonly debris = new LandingDebris();
+  /** The shopkeeper NPC. Built once the player model has loaded. */
+  private shopkeeper: Shopkeeper | null = null;
 
   private readonly hud: EnergyHud;
   private readonly pops: EnergyPopups;
   private readonly wins: WinsCounter;
-  private readonly winFlight: WinFlight;
+  /** Trophies popping around the local player when they collect a win. */
+  private readonly trophyBurst = new TrophyBurst();
   private readonly banner: WinBanner;
   private readonly keys: KeyHints;
   private readonly rail: HTMLDivElement;
@@ -94,7 +99,6 @@ export class Game {
   private localPlayer: LocalPlayer | null = null;
   private localSessionId: string | null = null;
   private localState: NetPlayerState | null = null;
-  private pendingRespawn: RespawnMessage | null = null;
   private lastLevel = -1;
   private lastRebirths = -1;
   private lastPurchases = '';
@@ -110,7 +114,6 @@ export class Game {
     this.hud = new EnergyHud(container);
     this.pops = new EnergyPopups(container);
     this.wins = new WinsCounter(container);
-    this.winFlight = new WinFlight(container);
     this.banner = new WinBanner(container);
     this.keys = new KeyHints(container);
 
@@ -122,11 +125,8 @@ export class Game {
       onPlayerAdded: (sessionId, state) => this.onPlayerState(sessionId, state, true),
       onPlayerChanged: (sessionId, state) => this.onPlayerState(sessionId, state, false),
       onPlayerRemoved: (sessionId) => this.remotePlayers.remove(sessionId),
-      onRespawn: (message) => {
-        this.pendingRespawn = message;
-        this.localPlayer?.acknowledgeRespawn();
-        this.applyPendingRespawn();
-      },
+      // Placed at spawn immediately - there is no death animation to wait for.
+      onRespawn: (message) => this.localPlayer?.teleport(message.x, message.y, message.z, message.rotationY),
       onWinAwarded: (message) => this.onWinAwarded(message),
     });
 
@@ -206,11 +206,26 @@ export class Game {
     window.addEventListener('mousedown', this.onGesture);
     window.addEventListener('touchstart', this.onGesture, { passive: true });
     this.renderer.onResize((width, height) => this.camera.setViewport(width, height));
+    this.renderer.renderer.domElement.addEventListener('wheel', this.onWheel, { passive: false });
   }
 
+  /**
+   * Mouse-wheel zoom: up zooms in, down zooms out. Bound to the canvas, so a
+   * wheel over a scrolling panel scrolls the panel instead.
+   */
+  private readonly onWheel = (event: WheelEvent): void => {
+    if (anyPanelOpen()) return;
+    event.preventDefault();
+    // Line- and page-mode wheels report in rows; convert to pixels.
+    const scale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 400 : 1;
+    this.camera.addZoom(event.deltaY * scale);
+  };
+
   async initialise(): Promise<void> {
-    this.sceneManager.scene.add(this.world.root);
+    this.sceneManager.scene.add(this.world.root, this.debris.root, this.trophyBurst.root);
     await playerModelLoader.load();
+    this.shopkeeper = new Shopkeeper();
+    this.sceneManager.scene.add(this.shopkeeper.root);
     this.localPlayer = new LocalPlayer(this.world.collision);
     this.sceneManager.scene.add(this.localPlayer.character.root, this.localPlayer.character.worldRoot);
     this.camera.snapTo(this.localPlayer.position);
@@ -235,9 +250,15 @@ export class Game {
       player.update(delta, input, this.input.look.yaw);
       const kind = player.jumpKind;
       if (kind !== 'none') this.playerAudio.jumped(kind === 'air');
+      // Landing impact: rubble, dust and a short shake, together on the frame
+      // of touchdown. Local only; the sound is played by PlayerAudio below.
+      const impact = player.landingImpact;
+      if (impact > 0) {
+        this.debris.burst(player.position.x, player.position.y, player.position.z, impact);
+        this.camera.shake(impact);
+      }
       this.run.update(delta, player);
 
-      if (player.deathComplete) this.applyPendingRespawn();
       if (player.consumeRespawnNudge()) this.network.requestRespawn();
 
       const placement = player.consumePlacement();
@@ -265,6 +286,9 @@ export class Game {
     this.shopPanel.tick(delta);
     this.world.scoreboard.update(this.network.leaderboard);
     this.pops.update(delta);
+    this.debris.update(delta);
+    this.trophyBurst.update(delta, this.localPlayer?.position ?? null);
+    this.shopkeeper?.update(delta, this.localPlayer?.position ?? null);
     this.remotePlayers.advance(delta);
     this.camera.update(delta, player?.horizontalSpeed ?? 0);
     const eye = this.camera.camera.position;
@@ -315,16 +339,6 @@ export class Game {
     for (const message of player.drainOutgoing()) this.network.sendInput(message);
   }
 
-  /** Held until the fall-over finishes, so nothing teleports mid-animation. */
-  private applyPendingRespawn(): void {
-    const player = this.localPlayer;
-    const message = this.pendingRespawn;
-    if (!player || !message) return;
-    if (player.isDying && !player.deathComplete) return;
-    this.pendingRespawn = null;
-    player.teleport(message.x, message.y, message.z, message.rotationY);
-  }
-
   private onPlayerState(sessionId: string, state: NetPlayerState, added: boolean): void {
     if (sessionId === this.localSessionId) {
       this.applyLocalState(state);
@@ -342,6 +356,7 @@ export class Game {
 
     player.setProgression(state.jumpVelocity, state.gravity, state.maxJumps, state.rebirths);
     player.character.setCosmetics(state.trailSlot, state.auraSlot);
+    player.character.setBoots(bestOwnedBoot(state.ownedBoots)?.slot ?? 0);
     if (state.ready) {
       player.reconcile({
         x: state.x,
@@ -389,22 +404,7 @@ export class Game {
     this.wins.update(message.total);
     this.audio.play('win');
     this.banner.show(`+${formatNumber(message.wins)} WINS!`);
-
-    const canvas = this.renderer.renderer.domElement;
-    const box = canvas.getBoundingClientRect();
-    let x = box.left + box.width / 2;
-    let y = box.top + box.height / 2;
-    const player = this.localPlayer;
-    if (player) {
-      FLIGHT_ORIGIN.copy(player.position);
-      FLIGHT_ORIGIN.y += 2;
-      FLIGHT_ORIGIN.project(this.camera.camera);
-      if (FLIGHT_ORIGIN.z < 1) {
-        x = box.left + ((FLIGHT_ORIGIN.x + 1) / 2) * box.width;
-        y = box.top + ((1 - FLIGHT_ORIGIN.y) / 2) * box.height;
-      }
-    }
-    this.winFlight.play(x, y);
+    this.trophyBurst.play();
   }
 
   private onStatusChange(status: ConnectionStatus): void {
@@ -414,6 +414,7 @@ export class Game {
   dispose(): void {
     this.input.detach();
     void this.network.disconnect();
+    this.renderer.renderer.domElement.removeEventListener('wheel', this.onWheel);
     window.removeEventListener('keydown', this.onHotkey);
     window.removeEventListener('keydown', this.onGesture);
     window.removeEventListener('mousedown', this.onGesture);
@@ -425,12 +426,14 @@ export class Game {
     this.hud.dispose();
     this.pops.dispose();
     this.wins.dispose();
-    this.winFlight.dispose();
+    this.trophyBurst.dispose();
     this.banner.dispose();
     this.keys.dispose();
     this.rail.remove();
     this.audio.dispose();
     this.remotePlayers.dispose();
+    this.debris.dispose();
+    this.shopkeeper?.dispose();
     this.world.dispose();
     this.renderer.dispose();
   }

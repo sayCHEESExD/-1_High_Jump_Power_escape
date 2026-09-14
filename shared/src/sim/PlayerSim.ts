@@ -44,7 +44,6 @@ export interface MovementInput {
   moveX: number;
   moveZ: number;
   jump: boolean;
-  sprint: boolean;
   cameraYaw: number;
 }
 
@@ -90,7 +89,6 @@ export const createMovementInput = (): MovementInput => ({
   moveX: 0,
   moveZ: 0,
   jump: false,
-  sprint: false,
   cameraYaw: 0,
 });
 
@@ -149,7 +147,6 @@ export const sanitiseInput = (input: Partial<MovementInput> | undefined): Moveme
     moveX,
     moveZ,
     jump: input?.jump === true,
-    sprint: input?.sprint === true,
     cameraYaw: finite(input?.cameraYaw),
   };
 };
@@ -283,7 +280,7 @@ const applyHorizontal = (motion: PlayerMotion, input: MovementInput, dt: number)
   const dirX = input.moveZ * sin - input.moveX * cos;
   const dirZ = input.moveZ * cos + input.moveX * sin;
 
-  const targetSpeed = input.sprint ? MOVEMENT.runSpeed : MOVEMENT.walkSpeed;
+  const targetSpeed = MOVEMENT.moveSpeed;
   const control = motion.grounded ? 1 : MOVEMENT.airControl;
 
   if (hasInput) {

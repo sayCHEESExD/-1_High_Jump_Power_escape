@@ -8,11 +8,10 @@ export interface MoveMessage {
   moveX: number;
   moveZ: number;
   jump: boolean;
-  sprint: boolean;
   cameraYaw: number;
 }
 
-export type RespawnReason = 'fell' | 'win' | 'manual' | 'join' | 'rebirth';
+export type RespawnReason = 'outOfWorld' | 'win' | 'manual' | 'join' | 'rebirth';
 
 export interface RespawnMessage {
   x: number;

@@ -36,7 +36,7 @@ export class ItemShopPanel extends Panel {
   private readonly buttons: HTMLButtonElement[] = [];
 
   constructor(parent: HTMLElement, private readonly onBuy: (index: number) => void) {
-    super(parent, 'shop', 'Item Shop', '<span style="font-size:1em">\u{1F48E}</span>');
+    super(parent, 'shop', 'Item Shop', ICONS.shop);
     const top = document.createElement('div');
     top.className = 'hj-shop__top hj-font hj-outline';
     this.timer = document.createElement('span');

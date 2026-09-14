@@ -11,7 +11,7 @@ const deg = (degrees: number): number => (degrees * Math.PI) / 180;
 /** Height of the backflip pivot above the feet (hip height). */
 export const FLIP_PIVOT_HEIGHT = 1.6;
 
-/** Height of the death tip-over pivot above the feet. */
+/** Height of the (idle) tip pivot above the feet. */
 export const TIP_PIVOT_HEIGHT = 1.1;
 
 export const LOCOMOTION = {
@@ -135,14 +135,15 @@ export const TRANSITIONS = {
   toAirborne: 0.12,
   toLanding: 0.05,
   toBackflip: 0.06,
-  toDying: 0.08,
 } as const;
 
-/** The fall-over played before the respawn. */
-export const DEATH = {
-  duration: 0.6,
-  roll: deg(88),
-  pitch: deg(20),
-  drop: 0.55,
-  splay: deg(34),
+/**
+ * Playback rate of the jump animations - the crouch, the airborne poses, the
+ * backflip and the landing - relative to their authored speed. 0.5 plays them
+ * at half speed. Purely visual: jump physics are untouched.
+ */
+export const JUMP_ANIMATION = {
+  playbackRate: 0.5,
+  /** How fast the rise/fall pose follows vertical velocity, per second, before the rate. */
+  airBlendRate: 10,
 } as const;

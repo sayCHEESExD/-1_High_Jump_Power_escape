@@ -57,7 +57,7 @@ export class BackpackPanel extends Panel {
       tabs.appendChild(button);
       this.tabs.set(key, button);
     };
-    addTab('equipment', 'Equipment', '<span style="font-size:30px">\u{1F48E}</span>');
+    addTab('equipment', 'Equipment', `<img src="${iconUrl('equipment.png')}" alt="">`);
     addTab('shoes', 'Shoes', `<img src="${iconUrl('shoe.png')}" alt="">`);
 
     const frame = document.createElement('div');

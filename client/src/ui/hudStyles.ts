@@ -52,7 +52,7 @@ export const injectHudStyles = (): void => {
 }
 .hj-tile:hover { transform: scale(1.06); }
 .hj-tile:active { transform: scale(0.96); }
-.hj-tile .hj-icon { width: 72%; height: 72%; object-fit: contain; filter: drop-shadow(0 3px 3px rgba(0,0,0,.35)); }
+.hj-tile .hj-icon { width: 86%; height: 86%; object-fit: contain; filter: drop-shadow(0 3px 3px rgba(0,0,0,.35)); }
 .hj-tile__label {
   position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%);
   font-size: clamp(11px, 1.1vw, 15px); white-space: nowrap; pointer-events: none;
@@ -76,7 +76,7 @@ body.hj-touch-mode .hj-tile__key { display: none; }
 .hj-tile--backpack { background: linear-gradient(160deg, #ffd76b, #ffa32b 55%, #d97708); }
 .hj-tile--audio { background: linear-gradient(160deg, #9bf06a, #4fce2e 60%, #2f9a1f); }
 .hj-tile--off { filter: saturate(.25) brightness(.7); }
-.hj-tile svg.hj-icon { width: 58%; height: 58%; }
+.hj-tile svg.hj-icon { width: 62%; height: 62%; }
 
 /* ---- Bottom: height, jumps, level bar ---- */
 .hj-hud {
@@ -107,7 +107,7 @@ body.hj-touch-mode .hj-tile__key { display: none; }
 }
 .hj-hud__level { left: 16px; }
 .hj-hud__amount { right: 16px; }
-.hj-hud__amount img { height: 1.1em; width: auto; }
+.hj-hud__amount img { height: 1.45em; width: auto; }
 .hj-hud--levelup .hj-hud__bar { animation: hj-bar-pop 460ms ease-out; }
 @keyframes hj-bar-pop { 0% { transform: scale(1); } 35% { transform: scale(1.03); } 100% { transform: scale(1); } }
 body.hj-touch-mode .hj-hud { bottom: calc(3vh + 104px); width: min(560px, 60vw); }
@@ -120,18 +120,6 @@ body.hj-touch-mode .hj-hud { bottom: calc(3vh + 104px); width: min(560px, 60vw);
 .hj-keys span { background: rgba(10,16,28,.55); color: #fff; border-radius: 9px; padding: 4px 9px; }
 .hj-keys b { display: inline-block; min-width: 18px; padding: 0 5px; margin-right: 5px; border-radius: 5px; background: #fff; color: var(--hj-ink); text-align: center; }
 body.hj-touch-mode .hj-keys { display: none; }
-
-/* ---- Trophies flying to the counter ---- */
-.hj-flight { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 30; }
-.hj-flight__cup { position: absolute; left: 0; top: 0; width: clamp(26px, 3vw, 40px); height: auto; opacity: 0; filter: drop-shadow(0 3px 5px rgba(0,0,0,.45)); }
-.hj-flight__cup[hidden] { display: none; }
-.hj-flight__cup--run { animation: hj-flight 620ms cubic-bezier(.4,0,.5,1) forwards; }
-@keyframes hj-flight {
-  0% { opacity: 0; transform: translate(calc(var(--hj-fx) - 50%), calc(var(--hj-fy) - 50%)) scale(.4); }
-  18% { opacity: 1; transform: translate(calc(var(--hj-fx) - 50%), calc(var(--hj-fy) - 50%)) scale(1.1) rotate(-20deg); }
-  60% { opacity: 1; transform: translate(calc(var(--hj-mx) - 50%), calc(var(--hj-my) - 50%)) scale(.95) rotate(140deg); }
-  100% { opacity: 0; transform: translate(calc(var(--hj-tx) - 50%), calc(var(--hj-ty) - 50%)) scale(.35) rotate(340deg); }
-}
 
 /* ---- Win banner ---- */
 .hj-banner {
@@ -151,7 +139,7 @@ body.hj-touch-mode .hj-keys { display: none; }
 .hj-pops { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 19; }
 .hj-pop { --hj-pop-tilt: 0deg; --hj-pop-scale: 1; position: absolute; display: flex; align-items: center; gap: 4px; opacity: 0; }
 .hj-pop[hidden] { display: none; }
-.hj-pop__icon { height: clamp(30px, 3.6vw, 52px); width: auto; filter: drop-shadow(0 3px 5px rgba(0,0,0,.45)); }
+.hj-pop__icon { height: clamp(38px, 4.4vw, 62px); width: auto; filter: drop-shadow(0 3px 5px rgba(0,0,0,.45)); }
 .hj-pop__value {
   font-size: clamp(16px, 2vw, 30px); line-height: 1; color: #ffe14d;
   text-shadow: 3px 0 0 var(--hj-ink), -3px 0 0 var(--hj-ink), 0 3px 0 var(--hj-ink), 0 -3px 0 var(--hj-ink),
@@ -175,7 +163,7 @@ body.hj-touch-mode .hj-keys { display: none; }
   background-size: 22px 22px; box-shadow: 0 18px 40px rgba(0,0,0,.5);
 }
 .hj-panel__head { display: flex; align-items: center; gap: 10px; padding: 8px 60px 4px 18px; font-size: clamp(26px, 3.4vw, 44px); }
-.hj-panel__head img, .hj-panel__head svg { height: 1.3em; width: 1.3em; object-fit: contain; flex: none; }
+.hj-panel__head img, .hj-panel__head svg { height: 1.6em; width: 1.6em; object-fit: contain; flex: none; }
 .hj-panel__close {
   position: absolute; right: -14px; top: -18px; width: 54px; height: 54px; border: none; background: none;
   font-size: 46px; line-height: 1; color: #f5363f; cursor: pointer;
@@ -189,7 +177,7 @@ body.hj-touch-mode .hj-keys { display: none; }
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   text-shadow: 2px 0 0 var(--hj-ink), -2px 0 0 var(--hj-ink), 0 2px 0 var(--hj-ink), 0 -2px 0 var(--hj-ink);
 }
-.hj-btn img { height: 1.2em; width: auto; }
+.hj-btn img { height: 1.35em; width: auto; }
 .hj-btn:disabled { filter: saturate(.3) brightness(.85); cursor: not-allowed; }
 .hj-btn--wins { background: linear-gradient(180deg, #e676ff, #b44bff 60%, #8a2bd6); }
 .hj-btn--gold { background: linear-gradient(180deg, #ffd76b, #ffa32b 55%, #e07f10); }
@@ -205,7 +193,7 @@ body.hj-touch-mode .hj-keys { display: none; }
 .hj-cos__swatch { width: 64px; height: 64px; border-radius: 50%; border: 3px solid rgba(0,0,0,.35); box-shadow: 0 0 18px var(--hj-glow, #fff); }
 .hj-cos__name { font-size: clamp(18px, 2.2vw, 28px); }
 .hj-cos__mult { font-size: clamp(14px, 1.5vw, 19px); color: #b8ff5c; display: flex; align-items: center; gap: 5px; }
-.hj-cos__mult img { height: 1.2em; width: auto; }
+.hj-cos__mult img { height: 1.45em; width: auto; }
 
 /* Rebirth */
 .hj-rb { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center; margin: 6px 0 14px; }
@@ -238,7 +226,7 @@ body.hj-touch-mode .hj-keys { display: none; }
 .hj-bp__tabs { display: flex; gap: 8px; justify-content: center; margin-bottom: 10px; }
 .hj-bp__empty { grid-column: 1 / -1; }
 .hj-bp__tab { min-width: 104px; padding: 6px 8px; border: 3px solid var(--hj-ink); border-radius: 12px; background: linear-gradient(180deg, #6de6ff, #2aa8f5); color: #fff; cursor: pointer; font-size: 13px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.hj-bp__tab img { height: 34px; width: auto; }
+.hj-bp__tab img { height: 44px; width: auto; }
 .hj-bp__tab--on { background: linear-gradient(180deg, #ffe14d, #ffb31f); }
 .hj-bp__frame { border: 4px solid var(--hj-ink); border-radius: 18px; padding: 10px; min-height: 240px; background: rgba(255,255,255,.7); }
 .hj-bp__title { text-align: center; font-size: clamp(16px, 2vw, 24px); margin-bottom: 8px; }
@@ -287,21 +275,15 @@ const SPEAKER =
   '<svg class="hj-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" stroke="#12181f" stroke-width="1.2" d="M4 9h3.2L12 4.6v14.8L7.2 15H4z"/>' +
   '<path fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" d="M15.6 8.6a4.6 4.6 0 0 1 0 6.8M18.4 5.8a8.4 8.4 0 0 1 0 12.4"/></svg>';
 
-/** No backpack art was supplied, so it is drawn: a few rectangles, no file. */
-const BACKPACK =
-  '<svg class="hj-icon" viewBox="0 0 24 24" aria-hidden="true"><g stroke="#12181f" stroke-width="1.3" stroke-linejoin="round">' +
-  '<path fill="#8a3b12" d="M8 6a4 4 0 0 1 8 0v1h-2V6a2 2 0 0 0-4 0v1H8z"/>' +
-  '<rect x="4.5" y="7" width="15" height="14" rx="4" fill="#e0452b"/>' +
-  '<rect x="7.5" y="13" width="9" height="6" rx="2" fill="#b8321c"/>' +
-  '<rect x="10.5" y="12" width="3" height="3" rx=".8" fill="#ffc933"/></g></svg>';
-
 export const ICONS = {
   trophy: icon('trophy.png'),
   rebirth: icon('rebirth.png'),
   trail: icon('trail.png'),
   aura: icon('aura.png'),
-  energy: icon('run.png'),
+  energy: icon('energy.png'),
   shoe: icon('shoe.png'),
-  backpack: BACKPACK,
+  backpack: icon('inventory.png'),
+  shop: icon('shop.png'),
+  equipment: icon('equipment.png'),
   audio: SPEAKER,
 } as const;

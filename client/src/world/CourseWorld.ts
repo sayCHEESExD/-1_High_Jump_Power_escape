@@ -4,16 +4,38 @@ import {
   COURSE_TOP_Y,
   EQUIPMENT_STALL,
   HUB,
+  PITS,
   STAIR_START_Z,
   STEPS,
   WIN_PADS,
   WorldCollision,
   formatNumber,
 } from '@highjump/shared';
-import { Group, Mesh, MeshLambertMaterial, type BufferGeometry, type Material } from 'three';
+import {
+  AdditiveBlending,
+  BoxGeometry,
+  CanvasTexture,
+  DoubleSide,
+  Group,
+  Mesh,
+  MeshBasicMaterial,
+  MeshLambertMaterial,
+  PlaneGeometry,
+  SRGBColorSpace,
+  Sprite,
+  SpriteMaterial,
+  TextureLoader,
+  type BufferGeometry,
+  type Material,
+  type Texture,
+} from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { PALETTE, biomeLook } from '../config/worldVisuals.js';
+import { BiomeDecor } from './BiomeDecor.js';
+import { BiomeSign } from './BiomeSign.js';
+import { BIOME_SIGN_RECTS } from './biomeSignLayout.js';
 import { BootShop } from './BootShop.js';
+import { HubDecor } from './HubDecor.js';
 import { CanvasSign } from './CanvasSign.js';
 import { EquipmentStall } from './EquipmentStall.js';
 import { Scoreboard } from './Scoreboard.js';
@@ -24,6 +46,30 @@ import { WorldTextures } from './WorldTextures.js';
 
 /** World units one stud covers. */
 const STUD = 4;
+
+/** Height of the golden light column over each win pad. */
+const GLOW_HEIGHT = 6;
+
+/** Trophy images floating inside each win pad's glow. */
+const TROPHIES_PER_PAD = 6;
+
+/** A soft round glow, bright in the middle and clear at the edges. */
+const radialGlowCanvas = (): HTMLCanvasElement => {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    const gradient = ctx.createRadialGradient(size / 2, size / 2, 4, size / 2, size / 2, size / 2);
+    gradient.addColorStop(0, 'rgba(255,255,255,0.9)');
+    gradient.addColorStop(0.55, 'rgba(255,220,120,0.45)');
+    gradient.addColorStop(1, 'rgba(255,200,60,0)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, size, size);
+  }
+  return canvas;
+};
 
 /**
  * The visible world, built from exactly the same shared data the collision
@@ -47,8 +93,40 @@ export class CourseWorld {
   private readonly geometries: BufferGeometry[] = [];
   private readonly materials: Material[] = [];
   private readonly signs: CanvasSign[] = [];
+  private readonly biomeSigns: BiomeSign[] = [];
+  /** Floating trophies over every win pad, and their bob phase and base height. */
+  private readonly padTrophies: { sprite: Sprite; baseY: number; phase: number }[] = [];
+  private readonly padGlow = new MeshBasicMaterial({
+    color: 0xffc933,
+    transparent: true,
+    opacity: 0.2,
+    blending: AdditiveBlending,
+    depthWrite: false,
+    side: DoubleSide,
+    fog: false,
+  });
+  private readonly padFloorGlow: MeshBasicMaterial;
+  private readonly trophyMaterial: SpriteMaterial;
+  private readonly textures2: Texture[] = [];
+  private time = 0;
+  private readonly decor = new BiomeDecor();
+  private readonly hubDecor = new HubDecor();
 
   constructor() {
+    const trophy = new TextureLoader().load('/ui/trophy.png');
+    trophy.colorSpace = SRGBColorSpace;
+    this.trophyMaterial = new SpriteMaterial({ map: trophy, transparent: true, depthWrite: false });
+    const floor = new CanvasTexture(radialGlowCanvas());
+    floor.colorSpace = SRGBColorSpace;
+    this.padFloorGlow = new MeshBasicMaterial({
+      map: floor,
+      color: 0xffd23d,
+      transparent: true,
+      blending: AdditiveBlending,
+      depthWrite: false,
+      fog: false,
+    });
+    this.textures2.push(trophy, floor);
     this.training = new TrainingArea(this.textures);
     this.bootShop = new BootShop();
     this.stall = new EquipmentStall(this.textures);
@@ -58,6 +136,8 @@ export class CourseWorld {
       this.training.root,
       this.bootShop.root,
       this.stall.root,
+      this.decor.root,
+      this.hubDecor.root,
     );
     this.buildHub();
     this.buildStaircase();
@@ -72,6 +152,16 @@ export class CourseWorld {
     this.sky.follow(cameraX, cameraY, cameraZ);
     this.training.update(delta);
     this.bootShop.update(delta);
+    this.stall.update(delta);
+    this.hubDecor.update(delta);
+
+    this.time += delta;
+    this.padGlow.opacity = 0.16 + Math.sin(this.time * 2.2) * 0.06;
+    this.padFloorGlow.opacity = 0.75 + Math.sin(this.time * 2.2) * 0.2;
+    for (const trophy of this.padTrophies) {
+      trophy.sprite.position.y = trophy.baseY + Math.sin(this.time * 1.8 + trophy.phase) * 0.45;
+      trophy.sprite.material.rotation = Math.sin(this.time * 1.3 + trophy.phase) * 0.18;
+    }
   }
 
   private buildHub(): void {
@@ -130,6 +220,20 @@ export class CourseWorld {
         column.translate(0, step.bottom + columnHeight / 2, cz);
         columns.push(column);
       }
+      // The floor of every gap: a studded pit a few units below the step before
+      // it, so a missed jump lands somewhere rather than nowhere.
+      for (const pit of PITS) {
+        if (pit.biome !== biome.index) continue;
+        const w = pit.maxX - pit.minX;
+        const d = pit.maxZ - pit.minZ;
+        const cz = (pit.minZ + pit.maxZ) / 2;
+        const floor = texturedBox(w, 1, d, STUD);
+        floor.translate(0, pit.floor - 0.5, cz);
+        tops.push(floor);
+        const under = texturedBox(w, 19, d, STUD * 2);
+        under.translate(0, pit.floor - 1 - 9.5, cz);
+        columns.push(under);
+      }
       this.merged(tops, this.lambert({ map: this.textures.studs(look.top, look.line) }));
       this.merged(columns, this.lambert({ color: look.cliff, map: bricks }));
 
@@ -146,12 +250,16 @@ export class CourseWorld {
       }
       this.merged(walls, this.lambert({ color: look.wall, map: bricks }));
 
-      const sign = new CanvasSign(24, 5, [
-        { text: biome.name, size: 1, fill: '#ffffff', stroke: '#1b2433', strokeWidth: 0.2 },
-      ]);
-      sign.mesh.position.set(-(biome.width / 2 - 13), first.top + 7, first.minZ + 1);
+      // The name board: the same spot on every biome's first riser, in front
+      // of its rocks, with scenery kept out of its sightline (biomeSignLayout).
+      const rect = BIOME_SIGN_RECTS.find((entry) => entry.biome === biome.index);
+      if (!rect) continue;
+      const sign = new BiomeSign(biome.name);
+      sign.mesh.position.set(rect.x, rect.y, rect.z);
       sign.mesh.rotation.y = Math.PI;
-      this.addSign(sign);
+      sign.mesh.renderOrder = 3;
+      this.biomeSigns.push(sign);
+      this.root.add(sign.mesh);
     }
 
     const summit = STEPS[STEPS.length - 1];
@@ -184,9 +292,29 @@ export class CourseWorld {
         { text: 'Return', size: 0.7, fill: '#ffffff', stroke: '#1b2433', strokeWidth: 0.18 },
         { text: `+${formatNumber(pad.wins)} Win`, size: 1, fill: '#ffd23d', stroke: '#5a2b00', strokeWidth: 0.2 },
       ]);
-      sign.mesh.position.set(cx, pad.maxY + 5, cz);
+      sign.mesh.position.set(cx, pad.maxY + 8, cz);
       sign.mesh.rotation.y = Math.PI;
       this.addSign(sign);
+
+      // The golden glow: a soft column of light over the pad and a bright pool
+      // on its floor, both additive so they read as light rather than as walls.
+      this.mesh(new BoxGeometry(w - 0.4, GLOW_HEIGHT, d - 0.4), this.padGlow, cx, pad.maxY + GLOW_HEIGHT / 2, cz).castShadow = false;
+      const pool = this.mesh(new PlaneGeometry(w + 4, d + 4), this.padFloorGlow, cx, pad.maxY + 0.06, cz);
+      pool.rotation.x = -Math.PI / 2;
+      pool.castShadow = false;
+      pool.receiveShadow = false;
+
+      // Trophies floating inside the glow. Sprites share one material and
+      // always face the camera; `update` bobs them.
+      for (let i = 0; i < TROPHIES_PER_PAD; i += 1) {
+        const sprite = new Sprite(this.trophyMaterial);
+        const angle = (i / TROPHIES_PER_PAD) * Math.PI * 2 + pad.biome;
+        const baseY = pad.maxY + 1.4 + ((i * 0.37 + pad.biome * 0.13) % 1) * 3.2;
+        sprite.position.set(cx + Math.cos(angle) * (w / 2 - 2.2), baseY, cz + Math.sin(angle) * (d / 2 - 2));
+        sprite.scale.setScalar(1.5 + (i % 3) * 0.3);
+        this.root.add(sprite);
+        this.padTrophies.push({ sprite, baseY, phase: i * 1.7 + pad.biome });
+      }
     }
   }
 
@@ -222,6 +350,13 @@ export class CourseWorld {
     for (const geometry of this.geometries) geometry.dispose();
     for (const material of this.materials) material.dispose();
     for (const sign of this.signs) sign.dispose();
+    for (const sign of this.biomeSigns) sign.dispose();
+    this.padGlow.dispose();
+    this.padFloorGlow.dispose();
+    this.trophyMaterial.dispose();
+    for (const texture of this.textures2) texture.dispose();
+    this.decor.dispose();
+    this.hubDecor.dispose();
     this.scoreboard.dispose();
     this.training.dispose();
     this.bootShop.dispose();

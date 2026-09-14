@@ -18,17 +18,6 @@ const RADIUS_MAX = 84;
 /** Deflection below which the stick reads as neutral, as a fraction of radius. */
 const DEADZONE = 0.18;
 
-/**
- * Deflection at which the stick counts as sprinting.
- *
- * There is no Shift key on a phone, and `sprint` is what picks `runSpeed` over
- * `walkSpeed` in the shared step - so without this a mobile player would be
- * permanently capped at a walk in a game whose whole progression is speed.
- * Pushing the stick to its edge IS the run, exactly as on a gamepad. This is
- * an input MAPPING; the movement formula is untouched.
- */
-const SPRINT_DEFLECTION = 0.7;
-
 /** Radians of camera rotation per pixel dragged. */
 const LOOK_SENSITIVITY = 0.005;
 
@@ -42,7 +31,7 @@ export interface LookSink {
  * drag-to-look.
  *
  * This is a SOURCE, not a second movement system. It writes the same
- * `moveX`/`moveZ`/`jump`/`sprint` fields the keyboard writes, through the same
+ * `moveX`/`moveZ`/`jump` fields the keyboard writes, through the same
  * `InputManager`, into the same `MoveMessage` - so prediction, reconciliation,
  * treadmill entry and exit, backflip validation and every server check behave
  * identically to desktop. Nothing here knows what a player is.
@@ -76,7 +65,6 @@ export class TouchControls {
 
   private moveX = 0;
   private moveZ = 0;
-  private sprint = false;
 
   /** Finger held on the jump button. */
   private jumpHeld = false;
@@ -182,7 +170,6 @@ export class TouchControls {
   apply(state: InputState): void {
     state.moveX += this.moveX;
     state.moveZ += this.moveZ;
-    if (this.sprint) state.sprint = true;
     if (this.jumpHeld || this.jumpPulse) state.jump = true;
     this.jumpPulse = false;
   }
@@ -313,7 +300,6 @@ export class TouchControls {
     if (deflection < DEADZONE || distance < 1e-4) {
       this.moveX = 0;
       this.moveZ = 0;
-      this.sprint = false;
       this.knob.style.transform = 'translate(-50%, -50%)';
       return;
     }
@@ -327,7 +313,6 @@ export class TouchControls {
     this.moveX = dirX * magnitude;
     // Screen Y grows downward; forward is up the screen.
     this.moveZ = -dirY * magnitude;
-    this.sprint = deflection >= SPRINT_DEFLECTION;
 
     const knobX = dirX * deflection * this.radius;
     const knobY = dirY * deflection * this.radius;
@@ -338,7 +323,6 @@ export class TouchControls {
     this.movePointer = null;
     this.moveX = 0;
     this.moveZ = 0;
-    this.sprint = false;
     this.knob.style.transform = 'translate(-50%, -50%)';
     this.stick.classList.remove('hj-touch__stick--active');
     this.placeStickAtRest();

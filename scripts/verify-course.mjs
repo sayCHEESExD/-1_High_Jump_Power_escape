@@ -17,6 +17,8 @@ import {
   EQUIPMENT_STALL,
   HUB,
   MOVEMENT,
+  PITS,
+  PIT_DEPTH,
   SCOREBOARD,
   SPAWN_POSITION,
   STAIR_START_Z,
@@ -66,6 +68,15 @@ check(
 check('win rewards strictly increase', increasing(BIOMES.map((b) => b.wins)));
 check('step rises strictly increase', increasing(BIOMES.map((b) => b.rise)));
 check('widths never grow', BIOMES.every((b, i) => i === 0 || b.width <= BIOMES[i - 1].width));
+check('gaps never shrink', BIOMES.every((b, i) => i === 0 || b.gap >= BIOMES[i - 1].gap));
+check('Grassland is reachable at level 1', BIOMES[0].rise < 8);
+check(
+  'each biome asks for a bigger jump than the last by a growing margin',
+  BIOMES.every((b, i) => i < 2 || b.rise - BIOMES[i - 1].rise >= BIOMES[i - 1].rise - BIOMES[i - 2].rise),
+  BIOMES.map((b) => b.rise).join(', '),
+);
+check('Forest needs a real jump (over twice level 1)', BIOMES[1].rise > 16);
+check('Crystal needs roughly the first rebirth level with one jump', BIOMES[3].rise >= 50);
 
 console.log('\nthe staircase\n');
 
@@ -144,7 +155,7 @@ const reaches = (fromTop, fromZ, to, height, maxJumps) => {
   motion.y = fromTop;
   motion.z = fromZ;
   const events = createSimEvents();
-  const input = { moveX: 0, moveZ: 1, jump: false, sprint: true, cameraYaw: 0 };
+  const input = { moveX: 0, moveZ: 1, jump: false, cameraYaw: 0 };
   let jumps = 0;
   let wasRising = false;
   for (let frame = 0; frame < 60 * 6; frame += 1) {
@@ -162,7 +173,7 @@ const reaches = (fromTop, fromZ, to, height, maxJumps) => {
     input.jump = false;
     stepPlayer(motion, input, params, 0, collision, events);
     if (motion.grounded && Math.abs(motion.y - to.top) < 0.01) return true;
-    if (collision.hasFallen(motion.y, motion.z)) return false;
+    if (collision.isOutOfWorld(motion.y)) return false;
   }
   return false;
 };
@@ -184,6 +195,39 @@ for (let i = 0; i < STEPS.length; i += 1) {
   if (to.step === 1) ladder.push({ biome: to.biome, rise });
 }
 check('every step is reachable with a jump taller than its rise', true);
+
+console.log('\nmissing a jump is safe\n');
+{
+  const gapped = STEPS.filter((step, i) => i > 0 && step.minZ > STEPS[i - 1].maxZ + 1e-9);
+  check('every gap has a pit floor', PITS.length === gapped.length, `${PITS.length} pits, ${gapped.length} gaps`);
+  check('no pit is deeper than a level-1 jump can climb out of', PITS.every((pit) => {
+    const before = STEPS.find((s) => Math.abs(s.maxZ - pit.minZ) < 1e-9);
+    return before && before.top - pit.floor < 8;
+  }));
+
+  // Walk straight off the front of a gapped step without jumping, and with a
+  // hopeless jump: the player must end up standing on something, in the world.
+  let unsafe = 0;
+  for (const step of gapped) {
+    const from = STEPS[step.index - 1];
+    for (const jump of [false, true]) {
+      const physics = resolveJumpPhysics(8);
+      const params = { jumpVelocity: physics.velocity, gravity: physics.gravity, maxJumps: 1 };
+      const motion = createMotion();
+      motion.x = 0;
+      motion.y = from.top;
+      motion.z = from.maxZ - 3;
+      const events = createSimEvents();
+      const input = { moveX: 0, moveZ: 1, jump: false, cameraYaw: 0 };
+      for (let frame = 0; frame < 60 * 4; frame += 1) {
+        input.jump = jump && frame === 8;
+        stepPlayer(motion, input, params, 1 / 60, collision, events);
+      }
+      if (!motion.grounded || collision.isOutOfWorld(motion.y) || motion.y < from.top - PIT_DEPTH - 0.01) unsafe += 1;
+    }
+  }
+  check('walking or jumping into any gap lands the player in its pit, never out of the world', unsafe === 0, `${unsafe} unsafe`);
+}
 check('no step can be reached with a jump shorter than its rise', true);
 check('air jumps stack: two jumps at 75% of the rise reach every step', true);
 

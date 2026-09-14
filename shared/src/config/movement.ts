@@ -7,10 +7,8 @@
  * speed also ran away would turn every landing into an overshoot.
  */
 export interface MovementConfig {
-  /** Ground speed, world units per second. */
-  readonly walkSpeed: number;
-  /** Sprint speed (Shift, or the stick at full deflection). */
-  readonly runSpeed: number;
+  /** Movement speed, world units per second. There is no sprint. */
+  readonly moveSpeed: number;
   readonly acceleration: number;
   readonly deceleration: number;
   /** Fraction of ground acceleration retained while airborne (0..1). */
@@ -31,8 +29,7 @@ export interface MovementConfig {
 }
 
 export const MOVEMENT: MovementConfig = {
-  walkSpeed: 24,
-  runSpeed: 30,
+  moveSpeed: 24,
   acceleration: 150,
   deceleration: 120,
   airControl: 0.72,

@@ -15,7 +15,6 @@ export interface AnimationInput {
   /** True on the frame an AIR jump starts - which is a backflip. */
   airJumped: boolean;
   landed: boolean;
-  dying: boolean;
 }
 
 export const createAnimationInput = (): AnimationInput => ({
@@ -25,5 +24,4 @@ export const createAnimationInput = (): AnimationInput => ({
   jumpStarted: false,
   airJumped: false,
   landed: false,
-  dying: false,
 });

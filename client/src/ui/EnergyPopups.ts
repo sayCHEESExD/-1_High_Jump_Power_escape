@@ -34,7 +34,7 @@ export class EnergyPopups {
       const node = document.createElement('div');
       node.className = 'hj-pop hj-font';
       node.innerHTML =
-        `<img class="hj-pop__icon" src="${iconUrl('run.png')}" alt="" draggable="false">` +
+        `<img class="hj-pop__icon" src="${iconUrl('energy.png')}" alt="" draggable="false">` +
         '<span class="hj-pop__value"></span>';
       node.hidden = true;
       this.root.appendChild(node);

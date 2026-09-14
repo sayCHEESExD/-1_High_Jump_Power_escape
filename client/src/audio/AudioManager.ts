@@ -9,19 +9,23 @@ const MUSIC_GAIN = 0.32;
 const AUDIO_URL = {
   background: '/audio/background.mp3',
   jump: '/audio/jump.mp3',
+  fall: '/audio/fall.mp3',
 } as const;
 
 const MAX_VOICES = 12;
 
-export type SoundName = 'jump' | 'flip' | 'land' | 'step' | 'death' | 'win' | 'level' | 'rebirth' | 'buy' | 'ui' | 'deny';
+/** Extra gain on the landing impact above the effects bus, so it cuts through. */
+const IMPACT_GAIN = 2.2;
+
+export type SoundName = 'jump' | 'flip' | 'land' | 'impact' | 'step' | 'win' | 'level' | 'rebirth' | 'buy' | 'ui' | 'deny';
 
 /** Seconds a sound refuses to retrigger, so nothing can machine-gun. */
 const COOLDOWNS: Readonly<Record<SoundName, number>> = {
   jump: 0.08,
   flip: 0.08,
   land: 0.12,
+  impact: 0.12,
   step: 0.05,
-  death: 0.6,
   win: 0.4,
   level: 0.3,
   rebirth: 0.8,
@@ -33,8 +37,8 @@ const COOLDOWNS: Readonly<Record<SoundName, number>> = {
 /**
  * Every sound in the game.
  *
- * The supplied files - the background track and the jump - are used as the
- * real audio; everything else is synthesised, because oscillators cost
+ * The supplied files - the background track, the jump and the landing impact
+ * (`fall.mp3`) - are used as the real audio; everything else is synthesised, because oscillators cost
  * hundreds of bytes against a 12 MB budget. The music is STREAMED through an
  * `<audio>` element (a decoded 2 MB mp3 would be tens of megabytes of samples)
  * and paused, not merely silenced, when muted.
@@ -49,6 +53,7 @@ export class AudioManager {
   private musicBus: GainNode | null = null;
   private musicElement: HTMLAudioElement | null = null;
   private jumpBuffer: AudioBuffer | null = null;
+  private fallBuffer: AudioBuffer | null = null;
   private loadingSamples = false;
   private voices = 0;
   private readonly lastPlayed = new Map<SoundName, number>();
@@ -136,11 +141,12 @@ export class AudioManager {
       case 'land':
         this.thud(now, 0.3 + level * 0.3);
         break;
+      case 'impact':
+        // Louder for a harder landing; a soft thud until the file has decoded.
+        if (!this.playBuffer(this.fallBuffer, now, IMPACT_GAIN * (0.7 + level * 0.3), 1)) this.thud(now, 0.3 + level * 0.3);
+        break;
       case 'step':
         this.thud(now, 0.07 + level * 0.1, 130);
-        break;
-      case 'death':
-        this.blip(now, 'sawtooth', 420, 60, 0.55, 0.55);
         break;
       case 'win':
         this.arpeggio(now, [0, 4, 7, 12, 16], 0.08, 'triangle', 0.5);
@@ -194,14 +200,18 @@ export class AudioManager {
     const ctx = this.context;
     if (!ctx || this.loadingSamples) return;
     this.loadingSamples = true;
-    try {
-      const response = await fetch(AUDIO_URL.jump);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      this.jumpBuffer = await ctx.decodeAudioData(await response.arrayBuffer());
-    } catch (error) {
-      // The synthesised fallback covers it.
-      logger.warn(SCOPE, `could not load ${AUDIO_URL.jump}: ${String(error)}`);
-    }
+    const load = async (url: string): Promise<AudioBuffer | null> => {
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await ctx.decodeAudioData(await response.arrayBuffer());
+      } catch (error) {
+        // The synthesised fallback covers it.
+        logger.warn(SCOPE, `could not load ${url}: ${String(error)}`);
+        return null;
+      }
+    };
+    [this.jumpBuffer, this.fallBuffer] = await Promise.all([load(AUDIO_URL.jump), load(AUDIO_URL.fall)]);
   }
 
   private playBuffer(buffer: AudioBuffer | null, at: number, gain: number, rate: number): boolean {
