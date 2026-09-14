@@ -8,6 +8,12 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
     <title>+1 High Jump Power Escape</title>
+    <!--
+      The Bloxity SDK (window.Legion.SDK). A plain script BEFORE the module
+      bundle, so it exists when the game initialises it. If the CDN is
+      unreachable the game still boots: every SDK call is guarded.
+    -->
+    <script src="https://sdk.bloxity.io/legion-sdk.min.js"></script>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body {

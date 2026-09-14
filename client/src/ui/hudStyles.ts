@@ -114,7 +114,7 @@ body.hj-touch-mode .hj-hud { bottom: calc(3vh + 104px); width: min(560px, 60vw);
 
 /* ---- Key hints (desktop) ---- */
 .hj-keys {
-  position: fixed; right: max(14px, env(safe-area-inset-right, 0px)); top: max(14px, env(safe-area-inset-top, 0px)); z-index: 20; display: flex; flex-direction: column;
+  position: fixed; right: max(14px, env(safe-area-inset-right, 0px)); top: max(104px, env(safe-area-inset-top, 0px)); z-index: 20; display: flex; flex-direction: column;
   gap: 6px; align-items: flex-end; pointer-events: none; font-size: 13px;
 }
 .hj-keys span { background: rgba(10,16,28,.55); color: #fff; border-radius: 9px; padding: 4px 9px; }
@@ -236,6 +236,58 @@ body.hj-touch-mode .hj-keys { display: none; }
 .hj-bp__equipped { position: absolute; right: 6px; top: 6px; background: #4fce2e; border: 2px solid var(--hj-ink); border-radius: 8px; padding: 0 5px; font-size: 12px; }
 .hj-bp__empty { text-align: center; color: #6b7280; margin-top: 60px; }
 .hj-bp__actions { display: flex; justify-content: space-between; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+
+/* ---- Bloxity account chip, top right (key hints sit below it) ---- */
+.hj-account {
+  position: fixed; top: max(12px, env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px));
+  z-index: 23; display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+}
+.hj-account__row {
+  display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 4px;
+  border: 3px solid var(--hj-ink); border-radius: 999px; background: rgba(18, 24, 38, 0.82);
+}
+.hj-account__pfp { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--hj-ink); object-fit: cover; }
+.hj-account__name { font-size: clamp(12px, 1.2vw, 15px); color: #fff; max-width: 22vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hj-account__note { font-size: clamp(10px, 1vw, 13px); color: #fff; opacity: .75; }
+.hj-account__actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.hj-account__btn, .hj-account__login {
+  cursor: pointer; border: 3px solid var(--hj-ink); border-radius: 10px; padding: 5px 10px;
+  font-size: clamp(11px, 1.1vw, 14px); color: #fff; box-shadow: 0 3px 0 rgba(0,0,0,.3);
+  background: linear-gradient(180deg, #6de6ff 0%, #2aa8f5 55%, #1670d0 100%);
+  text-shadow: 1px 0 0 var(--hj-ink), -1px 0 0 var(--hj-ink), 0 1px 0 var(--hj-ink), 0 -1px 0 var(--hj-ink);
+}
+.hj-account__login { background: linear-gradient(180deg, #ffd76b 0%, #ffa32b 55%, #d97708 100%); padding: 7px 14px; }
+.hj-account__btn:hover, .hj-account__login:hover { filter: brightness(1.1); }
+body.hj-touch-mode .hj-account__name { max-width: 30vw; }
+
+/* Friends, Bux and avatar panels */
+.hj-panel__note { margin: 4px 0 12px; line-height: 1.5; }
+.hj-action {
+  width: 100%; margin-top: 8px; padding: 11px; border: 4px solid var(--hj-ink); border-radius: 14px;
+  background: linear-gradient(180deg, #58e06a, #2fae42); color: #fff; font-size: 17px; cursor: pointer;
+}
+.hj-action:disabled { background: linear-gradient(180deg, #b9c2cc, #93a0ad); cursor: not-allowed; }
+.hj-friend, .hj-bux { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-bottom: 2px solid rgba(43,60,88,.16); }
+.hj-friend:last-of-type, .hj-bux:last-of-type { border-bottom: none; }
+.hj-friend__pfp { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--hj-ink); object-fit: cover; flex: none; }
+.hj-friend__name, .hj-bux__text { display: flex; flex-direction: column; line-height: 1.25; flex: 1 1 auto; min-width: 0; }
+.hj-friend__name b, .hj-friend__name small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hj-friend__name small, .hj-bux__text small { opacity: .65; }
+.hj-friend__status { font-size: 12px; opacity: .75; flex: none; }
+.hj-friend__invite, .hj-bux__buy {
+  cursor: pointer; flex: none; border: 3px solid var(--hj-ink); border-radius: 9px; padding: 5px 11px;
+  color: #fff; font-size: 13px; background: linear-gradient(180deg, #9bf06a 0%, #4fce2e 60%, #37a81f 100%);
+}
+.hj-bux__buy { background: linear-gradient(180deg, #ffd76b 0%, #ffa32b 55%, #d97708 100%); }
+.hj-friend__invite:disabled, .hj-bux__buy:disabled { filter: saturate(.3) brightness(.85); cursor: default; }
+.hj-slider { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; font-size: 13px; }
+.hj-slider input { width: 100%; accent-color: #b44bff; }
+
+/* FPS readout (Bloxity show_fps) */
+.hj-fps {
+  position: fixed; right: max(12px, env(safe-area-inset-right, 0px)); bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  z-index: 23; padding: 3px 8px; border-radius: 8px; background: rgba(10,16,28,.6); color: #b8ff5c; font-size: 13px; pointer-events: none;
+}
 
 /* Phones on their side: the rail becomes a row across the top-left. */
 @media (orientation: landscape) and (max-height: 500px) {

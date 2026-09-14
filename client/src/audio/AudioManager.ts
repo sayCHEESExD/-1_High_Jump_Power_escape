@@ -59,6 +59,9 @@ export class AudioManager {
   private readonly lastPlayed = new Map<SoundName, number>();
   private muted = false;
   private started = false;
+  /** Master and music volume from the portal settings, 0..1. Kept apart from mute. */
+  private masterLevel = 1;
+  private musicLevel = 1;
 
   constructor() {
     try {
@@ -85,13 +88,15 @@ export class AudioManager {
         return;
       }
       this.master = this.context.createGain();
-      this.master.gain.value = this.muted ? 0 : 1;
+      // Built at the level the portal has already set: settings arrive before
+      // the first gesture creates the context.
+      this.master.gain.value = this.muted ? 0 : this.masterLevel;
       this.master.connect(this.context.destination);
       this.sfxBus = this.context.createGain();
       this.sfxBus.gain.value = SFX_GAIN;
       this.sfxBus.connect(this.master);
       this.musicBus = this.context.createGain();
-      this.musicBus.gain.value = MUSIC_GAIN;
+      this.musicBus.gain.value = MUSIC_GAIN * this.musicLevel;
       this.musicBus.connect(this.master);
     }
 
@@ -112,13 +117,32 @@ export class AudioManager {
       /* per-viewer convenience only */
     }
     if (this.master && this.context) {
-      this.master.gain.setTargetAtTime(this.muted ? 0 : 1, this.context.currentTime, 0.05);
+      this.master.gain.setTargetAtTime(this.muted ? 0 : this.masterLevel, this.context.currentTime, 0.05);
     }
     if (this.musicElement) {
       if (this.muted) this.musicElement.pause();
       else void this.musicElement.play().catch(() => undefined);
     }
     return this.muted;
+  }
+
+  /**
+   * Master volume, 0..1 (the portal's `master_volume`). Separate from mute: the
+   * master gain is the product of the two, so unmuting restores the slider.
+   */
+  setMasterVolume(level: number): void {
+    this.masterLevel = Number.isFinite(level) ? Math.min(Math.max(level, 0), 1) : 1;
+    if (this.master && this.context && !this.muted) {
+      this.master.gain.setTargetAtTime(this.masterLevel, this.context.currentTime, 0.05);
+    }
+  }
+
+  /** Music volume, 0..1 (the portal's `music_volume`), against the game's own mix. */
+  setMusicVolume(level: number): void {
+    this.musicLevel = Number.isFinite(level) ? Math.min(Math.max(level, 0), 1) : 1;
+    if (this.musicBus && this.context) {
+      this.musicBus.gain.setTargetAtTime(MUSIC_GAIN * this.musicLevel, this.context.currentTime, 0.05);
+    }
   }
 
   play(name: SoundName, intensity = 1): void {

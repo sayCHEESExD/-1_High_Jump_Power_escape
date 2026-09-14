@@ -54,6 +54,11 @@ export const MessageType = {
   ToggleItem: 'toggleItem',
   /** Client -> server: delete one backpack item. */
   DeleteItem: 'deleteItem',
+  /**
+   * Client -> server: "my Bloxity token is now this" (login or logout mid-session).
+   * The server verifies it with Bloxity; it never trusts an id from a client.
+   */
+  BloxityIdentity: 'bloxityIdentity',
 } as const;
 
 export type MessageType = (typeof MessageType)[keyof typeof MessageType];

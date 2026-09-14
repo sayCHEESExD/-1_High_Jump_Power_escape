@@ -7,6 +7,8 @@ import type { MapSchema } from '@colyseus/schema';
 export interface NetPlayerState {
   sessionId: string;
   handle: string;
+  /** Verified Bloxity display name, or '' for a guest. */
+  displayName: string;
   x: number;
   y: number;
   z: number;

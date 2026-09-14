@@ -1,6 +1,7 @@
 import {
   MessageType,
   ROOM_NAME,
+  type BloxityIdentityMessage,
   type ClaimWinMessage,
   type IndexMessage,
   type MoveMessage,
@@ -62,7 +63,29 @@ export class NetworkClient {
   private client: Client | null = null;
   private room: Room<NetGameState> | null = null;
 
+  /**
+   * Where the join gets the Bloxity token from. A callback rather than a stored
+   * value, so a logout between two joins can never send the previous token.
+   */
+  private identity: (() => string | null) | null = null;
+
   constructor(private readonly handlers: NetworkHandlers = {}) {}
+
+  /** Where to read the Bloxity token at join time. */
+  setIdentityProvider(provider: () => string | null): void {
+    this.identity = provider;
+  }
+
+  /** Tell the room about a login or logout that happened after joining. */
+  sendIdentity(token: string | null): void {
+    const message: BloxityIdentityMessage = { token: token ?? '' };
+    this.room?.send(MessageType.BloxityIdentity, message);
+  }
+
+  /** The Colyseus room id, or '' when not in one. */
+  get roomId(): string {
+    return this.room?.roomId ?? '';
+  }
 
   get sessionId(): string | null {
     return this.room?.sessionId ?? null;
@@ -92,7 +115,11 @@ export class NetworkClient {
 
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       try {
-        this.room = await this.client.joinOrCreate<NetGameState>(ROOM_NAME, { playerId });
+        this.room = await this.client.joinOrCreate<NetGameState>(ROOM_NAME, {
+          playerId,
+          // Optional. Verified by the server with Bloxity, never trusted as-is.
+          bloxityToken: this.identity?.() ?? undefined,
+        });
         break;
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);

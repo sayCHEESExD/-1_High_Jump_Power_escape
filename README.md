@@ -113,6 +113,26 @@ following [hosting.bloxity.io/docs](https://hosting.bloxity.io/docs):
 The only secret is `LEGION_DEPLOY_TOKEN`. After the first push, make the GHCR package
 public so Legion can pull it.
 
+### Bloxity SDK
+
+Login, avatar, friends, portal settings, lifecycle and Bux are integrated in
+`client/src/bloxity/` (one module, `Bloxity.ts`) with the account chip in
+`client/src/ui/BloxityPanel.ts`. Bux fulfilment is server-side:
+
+| Server env | Purpose |
+| --- | --- |
+| `BLOXITY_WEBHOOK_SECRET` | shared secret Bloxity sends as `x-legion-webhook-secret`; required, or `/bloxity/bux` refuses (and Bloxity refunds) |
+| `BLOXITY_WEBHOOK_ALLOW_UNSIGNED` | `1` accepts unsigned webhooks - local development only |
+| `BLOXITY_API_BASE` | defaults to `https://api.bloxity.io` (token verification) |
+
+Register `https://<backend host>/bloxity/bux` as the game's webhook and create the SKUs
+`wins_small` and `wins_large` in the Bloxity catalogue.
+
+On `localhost` the SDK sends login and API calls to the page's own origin (its
+documented behaviour), so logging in from `npm run dev` needs a Bloxity backend there.
+To use the real one locally, build with `VITE_BLOXITY_API_URL=https://api.bloxity.io`
+and `VITE_BLOXITY_PORTAL_URL=https://bloxity.io`. Deployed builds need neither.
+
 ### Unblocked City
 
 The portal hooks are build-time configuration only, and nothing is hardcoded. With

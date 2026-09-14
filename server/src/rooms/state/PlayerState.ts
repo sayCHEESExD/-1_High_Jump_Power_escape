@@ -12,6 +12,8 @@ export class PlayerState extends Schema {
   @type('string') sessionId = '';
   /** Derived from the player's id; the id itself never leaves the server. */
   @type('string') handle = '';
+  /** The Bloxity display name, set ONLY from a token the server verified. '' for guests. */
+  @type('string') displayName = '';
 
   @type('float32') x: number = SPAWN_POSITION.x;
   @type('float32') y: number = SPAWN_POSITION.y;

@@ -7,6 +7,7 @@ import {
   handleFor,
   shopSecondsLeft,
   shopSlotAt,
+  type BloxityIdentityMessage,
   type ClaimWinMessage,
   type IndexMessage,
   type MoveMessage,
@@ -15,6 +16,8 @@ import {
   type SlotMessage,
   type WinAwardedMessage,
 } from '@highjump/shared';
+import { verifyBloxityToken } from '../bloxity/bloxityIdentity.js';
+import { buxGrants } from '../bloxity/buxGrantsStore.js';
 import { serverConfig } from '../config/serverConfig.js';
 import { MovementService } from '../movement/MovementService.js';
 import { BootService } from '../progression/BootService.js';
@@ -24,6 +27,7 @@ import { EquipmentService } from '../progression/EquipmentService.js';
 import { leaderboardService } from '../progression/LeaderboardService.js';
 import { profileStore } from '../progression/ProfileStore.js';
 import { RebirthService } from '../progression/RebirthService.js';
+import { wallet } from '../progression/Wallet.js';
 import { WinService } from '../progression/WinService.js';
 import { logger } from '../util/logger.js';
 import { GameState } from './state/GameState.js';
@@ -39,6 +43,8 @@ const REQUEST_COOLDOWN_MS = 150;
 
 interface JoinOptions {
   playerId?: string;
+  /** A Bloxity token, verified by the server with Bloxity. Never an id. */
+  bloxityToken?: string;
 }
 
 /**
@@ -70,6 +76,15 @@ export class GameRoom extends Room<GameState> {
   private readonly playerIds = new Map<string, string>();
   private readonly lastRequest = new Map<string, number>();
   private autosaveTimer = 0;
+
+  /**
+   * VERIFIED Bloxity account id per session, for Bux fulfilment. Only ever
+   * written from a token Bloxity itself resolved, so a grant can only reach the
+   * account that paid for it.
+   */
+  private readonly bloxityIds = new Map<string, string>();
+  /** Latest identity check per session, so a stale verification cannot win a race. */
+  private readonly identityChecks = new Map<string, number>();
 
   override onCreate(): void {
     this.setState(new GameState());
@@ -122,6 +137,10 @@ export class GameRoom extends Room<GameState> {
       this.request(client, (player) => this.equipment.remove(player, Number(message?.index), this.energy)),
     );
 
+    this.onMessage(MessageType.BloxityIdentity, (client, message: BloxityIdentityMessage) =>
+      this.resolveIdentity(client.sessionId, typeof message?.token === 'string' ? message.token : ''),
+    );
+
     this.setSimulationInterval((deltaMs) => this.tick(deltaMs / 1000), serverConfig.patchRateMs);
     logger.info(SCOPE, `room ${this.roomId} created (capacity ${MAX_PLAYERS_PER_ROOM})`);
   }
@@ -150,6 +169,11 @@ export class GameRoom extends Room<GameState> {
     this.energy.initialise(player);
     this.placeAt(client, player, 'join');
 
+    // In the background: a join must not wait on a round trip to Bloxity.
+    if (typeof options.bloxityToken === 'string' && options.bloxityToken) {
+      this.resolveIdentity(client.sessionId, options.bloxityToken);
+    }
+
     logger.info(
       SCOPE,
       `join ${client.sessionId} (${restored ? 'restored' : 'new'}) level=${player.level} ` +
@@ -166,6 +190,8 @@ export class GameRoom extends Room<GameState> {
     this.winService.forget(client.sessionId);
     this.playerIds.delete(client.sessionId);
     this.lastRequest.delete(client.sessionId);
+    this.bloxityIds.delete(client.sessionId);
+    this.identityChecks.delete(client.sessionId);
     logger.info(SCOPE, `leave ${client.sessionId} (${this.clients.length} left)`);
   }
 
@@ -235,11 +261,65 @@ export class GameRoom extends Room<GameState> {
       }
     }
 
+    // Bux bought by someone already in the room. One boolean in the common case.
+    if (buxGrants.hasPending) {
+      for (const [sessionId, player] of this.state.players) this.applyGrants(sessionId, player);
+    }
+
     this.autosaveTimer += delta;
     if (this.autosaveTimer >= AUTOSAVE_SECONDS) {
       this.autosaveTimer = 0;
       for (const [sessionId, player] of this.state.players) this.persist(sessionId, player);
     }
+  }
+
+  /**
+   * Resolve a Bloxity token to an account, then hand over anything it bought.
+   *
+   * An empty token is a logout. Every call supersedes the one before it, so a
+   * slow verification of an old token can never overwrite a newer answer.
+   */
+  private resolveIdentity(sessionId: string, token: string): void {
+    const check = (this.identityChecks.get(sessionId) ?? 0) + 1;
+    this.identityChecks.set(sessionId, check);
+
+    if (!token) {
+      this.bloxityIds.delete(sessionId);
+      const player = this.state.players.get(sessionId);
+      if (player) player.displayName = '';
+      return;
+    }
+
+    void verifyBloxityToken(token, serverConfig.bloxityApiBase).then((user) => {
+      if (this.identityChecks.get(sessionId) !== check) return;
+      const player = this.state.players.get(sessionId);
+      if (!player) return;
+      if (!user) {
+        this.bloxityIds.delete(sessionId);
+        player.displayName = '';
+        return;
+      }
+      this.bloxityIds.set(sessionId, user.id);
+      player.displayName = user.displayName || user.username;
+      logger.info(SCOPE, `${sessionId} verified as Bloxity @${user.username}`);
+      this.applyGrants(sessionId, player);
+    });
+  }
+
+  /**
+   * Hand over purchases waiting for this player's verified account. Through
+   * `wallet.add` like every other award, and saved immediately.
+   */
+  private applyGrants(sessionId: string, player: PlayerState): void {
+    const bloxityId = this.bloxityIds.get(sessionId);
+    if (!bloxityId) return;
+    const grants = buxGrants.drain(bloxityId);
+    if (grants.length === 0) return;
+    for (const grant of grants) {
+      wallet.add(player, grant.wins);
+      logger.info(SCOPE, `granted ${grant.sku} to ${sessionId} (+${grant.wins} wins) [${grant.transactionId}]`);
+    }
+    this.persist(sessionId, player);
   }
 
   private updateShopClock(): void {

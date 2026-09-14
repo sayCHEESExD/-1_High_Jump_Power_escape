@@ -10,6 +10,16 @@ export interface ServerConfig {
   readonly patchRateMs: number;
   /** Directory holding persisted player profiles. */
   readonly dataDir: string;
+  /**
+   * Shared secret Bloxity sends as `x-legion-webhook-secret`. Without one the
+   * Bux webhook REFUSES every delivery (so Bloxity refunds), because an
+   * unauthenticated endpoint would grant Wins to anybody who found it.
+   */
+  readonly buxWebhookSecret: string;
+  /** Accept unsigned webhooks when no secret is set. Local development only. */
+  readonly buxAllowUnsigned: boolean;
+  /** Bloxity's API, for verifying player tokens. */
+  readonly bloxityApiBase: string;
 }
 
 const int = (value: string | undefined, fallback: number): number => {
@@ -33,4 +43,7 @@ export const serverConfig: ServerConfig = {
   tickRate: SERVER_TICK_RATE,
   patchRateMs: 1000 / SERVER_TICK_RATE,
   dataDir: resolve(process.env['HIGHJUMP_DATA_DIR'] ?? 'data'),
+  buxWebhookSecret: process.env['BLOXITY_WEBHOOK_SECRET'] ?? '',
+  buxAllowUnsigned: process.env['BLOXITY_WEBHOOK_ALLOW_UNSIGNED'] === '1',
+  bloxityApiBase: (process.env['BLOXITY_API_BASE'] ?? 'https://api.bloxity.io').replace(/\/+$/, ''),
 };

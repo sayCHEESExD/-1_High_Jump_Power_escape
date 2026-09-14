@@ -59,7 +59,7 @@ export class PlayerAnimator {
   private airWeight = 1;
 
   constructor(
-    private readonly rig: PlayerRig,
+    private rig: PlayerRig,
     private readonly tipPivot: Group,
     private readonly flipPivot: Group,
     private readonly visual: Group,
@@ -71,6 +71,14 @@ export class PlayerAnimator {
 
   get currentState(): AnimationState {
     return this.state;
+  }
+
+  /**
+   * Drive a different body (a Bloxity avatar swap). The pose buffers are left
+   * alone, so the current animation continues on the new rig next frame.
+   */
+  setRig(rig: PlayerRig): void {
+    this.rig = rig;
   }
 
   reset(): void {

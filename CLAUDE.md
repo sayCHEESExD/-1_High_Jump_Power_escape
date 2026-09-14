@@ -111,6 +111,23 @@ and the world is a **staircase** climbing along +Z through 14 biomes.
 - Portal (Unblocked City) integration is build-time env only (`portalConfig.ts`) and
   must never block play.
 
+## Bloxity
+
+- The SDK (`window.Legion.SDK`) loads from `https://sdk.bloxity.io/legion-sdk.min.js` in
+  `client/index.html`. **Only `client/src/bloxity/Bloxity.ts` touches it**, and every call
+  is guarded: a blocked CDN must never stop play. Slug: `high-jump-power-escape`
+  (`VITE_BLOXITY_GAME_ID` overrides).
+- There is exactly ONE `auth.onUserChanged` subscription (in `Bloxity`); UI fans out from
+  it. The user object is never cached.
+- Bux purchases pass a SKU only. Wins are granted by the SERVER when Bloxity's webhook
+  hits `POST /bloxity/bux` (secret header `x-legion-webhook-secret`, env
+  `BLOXITY_WEBHOOK_SECRET`; without it every delivery is refused). The SKU -> Wins table
+  is `server/src/bloxity/BuxGrants.ts`; grants are queued to disk, then applied through
+  `wallet.add` to the session whose token the server verified with Bloxity.
+- Avatar cosmetics dress the LOCAL character only (`BloxityAvatar`): a skin or body part
+  swaps in Bloxity's `player.glb` via `PlayerCharacter.setModel`; hats/back hang on bones;
+  proportions scale bones, never rotate them.
+
 ## Verification
 
 Do not claim something works without running it: `npm run typecheck`,

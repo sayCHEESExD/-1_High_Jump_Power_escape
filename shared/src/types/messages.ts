@@ -42,3 +42,12 @@ export interface SlotMessage {
 export interface IndexMessage {
   index: number;
 }
+
+/**
+ * "My Bloxity token is now this." A TOKEN, not an id: the server resolves it
+ * with Bloxity, so nobody can claim another account's paid-for Bux grants by
+ * naming its id. Empty means logged out.
+ */
+export interface BloxityIdentityMessage {
+  token: string;
+}
