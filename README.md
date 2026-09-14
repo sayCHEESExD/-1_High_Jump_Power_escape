@@ -61,7 +61,7 @@ rooms close.
 | Action | Desktop | Touch |
 | --- | --- | --- |
 | Move | WASD / arrows (mouse aims the camera) | left stick |
-| Sprint | Shift | push the stick to its edge |
+| Zoom | mouse wheel (up = in, down = out) | - |
 | Jump / air backflip | Space | jump button |
 | Rebirth / Trail / Aura / Backpack / Mute | R / T / Y / B / M | left rail tiles |
 | Free the cursor | Esc | - |
@@ -91,6 +91,27 @@ long-lived Node process.
   `/health` reports rooms and players.
 - **Client:** `npm run build:client` and publish `client/dist` (`netlify.toml` is
   included). Set `VITE_SERVER_URL` at build time to the server's `wss://` address.
+
+### Bloxity Hosting (GitHub Actions)
+
+`.github/workflows/deploy.yml` deploys game id `high-jump-power-escape` on every push,
+following [hosting.bloxity.io/docs](https://hosting.bloxity.io/docs):
+
+| Branch | Channel | Backend (Colyseus) | Frontend |
+| --- | --- | --- | --- |
+| `dev` | `dev` | `wss://high-jump-power-escape.dev.host.bloxity.io` | `https://high-jump-power-escape.dev.play.bloxity.io` |
+| `main` | `prod` | `wss://high-jump-power-escape.host.bloxity.io` | `https://high-jump-power-escape.play.bloxity.io` |
+
+1. Typecheck and verify.
+2. Build the server image, push `ghcr.io/<owner>/high-jump-power-escape-server:<channel>-<sha>`,
+   and roll it with `POST https://legion.bloxity.io/v1/apps/high-jump-power-escape/deploy`
+   (`version` = commit SHA, `seatCap` 15 = the room cap).
+3. Build the client with that channel's `VITE_SERVER_URL`, zip `client/dist` with
+   `index.html` at the root, and upload the raw zip to
+   `POST https://api.bloxity.io/v1/hosting/games/high-jump-power-escape/frontend?channel=<channel>&version=<sha>`.
+
+The only secret is `LEGION_DEPLOY_TOKEN`. After the first push, make the GHCR package
+public so Legion can pull it.
 
 ### Unblocked City
 
