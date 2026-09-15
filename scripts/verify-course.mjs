@@ -239,5 +239,56 @@ for (const { biome, rise } of ladder) {
   );
 }
 
+console.log('\npushing into a wall is stable\n');
+import * as contact from '../shared/dist/index.js';
+{
+  // Positions reach the client as float32, so a player stopped against a face
+  // arrives a hair INSIDE it. Replaying input from there must keep them pressed
+  // against the face - not shove them sideways along it (the shop-counter shake).
+  const wallCollision = new contact.WorldCollision();
+  const params = { jumpVelocity: 40, gravity: 100, maxJumps: 1 };
+  const R = contact.BODY_RADIUS;
+  const stall = contact.EQUIPMENT_STALL;
+  const stallMinX = stall.x - stall.width / 2;
+  const stallMaxX = stall.x + stall.width / 2;
+  const stallMinZ = stall.z - stall.depth / 2;
+  const stallMaxZ = stall.z + stall.depth / 2;
+  const riser = STEPS[1];
+  const cases = [
+    { label: 'the shop counter, front', x: stall.x, z: stallMinZ - R, y: 0, moveX: 0, moveZ: 1, axis: 'z', limit: (v) => v <= stallMinZ - R + 0.01 },
+    { label: 'the shop counter, back', x: stall.x, z: stallMaxZ + R, y: 0, moveX: 0, moveZ: -1, axis: 'z', limit: (v) => v >= stallMaxZ + R - 0.01 },
+    { label: 'the shop counter, left end', x: stallMaxX + R, z: stall.z, y: 0, moveX: 1, moveZ: 0, axis: 'x', limit: (v) => v >= stallMaxX + R - 0.01 },
+    { label: 'the shop counter, right end', x: stallMinX - R, z: stall.z, y: 0, moveX: -1, moveZ: 0, axis: 'x', limit: (v) => v <= stallMinX - R + 0.01 },
+    { label: 'a stair riser', x: 0, z: riser.minZ - R, y: STEPS[0].top, moveX: 0, moveZ: 1, axis: 'z', limit: (v) => v <= riser.minZ - R + 0.01 },
+  ];
+  for (const c of cases) {
+    const motion = contact.createMotion();
+    // Exactly what the client decodes from the replicated schema.
+    motion.x = Math.fround(c.x);
+    motion.z = Math.fround(c.z);
+    motion.y = c.y;
+    motion.grounded = true;
+    const input = contact.createMovementInput();
+    // moveX is the player's RIGHT (-X), so +X is pushed with moveX = -1.
+    input.moveX = -c.moveX;
+    input.moveZ = c.moveZ;
+    const events = contact.createSimEvents();
+    const tangent = c.axis === 'z' ? 'x' : 'z';
+    const start = motion[tangent];
+    let drift = 0;
+    let inside = false;
+    for (let i = 0; i < 60; i += 1) {
+      contact.stepPlayer(motion, input, params, 1 / 60, wallCollision, events);
+      drift = Math.max(drift, Math.abs(motion[tangent] - start));
+      if (!c.limit(motion[c.axis])) inside = true;
+      // Re-quantise every step, as if each were a fresh server patch.
+      motion.x = Math.fround(motion.x);
+      motion.z = Math.fround(motion.z);
+    }
+    check(`${c.label}: no sideways shove`, drift < 0.05, `drifted ${drift.toFixed(3)} along ${tangent}`);
+    check(`${c.label}: stays outside`, !inside, `${c.axis}=${motion[c.axis]}`);
+  }
+}
+
 console.log(`\n${failures === 0 ? 'course verified' : `${failures} FAILURE(S)`}\n`);
 process.exit(failures === 0 ? 0 : 1);

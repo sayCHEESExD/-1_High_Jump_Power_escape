@@ -35,6 +35,20 @@ const LANDING_TOLERANCE = MOVEMENT.stepHeight;
 
 const CEILING_TOLERANCE = 0.05;
 
+/**
+ * How much two boxes may overlap and still count as merely TOUCHING in
+ * `resolveAxis`.
+ *
+ * Positions reach the client as float32 (the replicated schema), so a player
+ * the server stopped exactly against a face arrives a few millionths INSIDE it.
+ * Without this, replaying from that position made the OTHER axis's resolve see
+ * an overlap and shove the player to the far end of the box - several units
+ * sideways, every server patch: the stuck-and-shaking at the shop counter.
+ * A millimetre is far above float32 error at this course's coordinates and far
+ * below anything a player could see.
+ */
+const CONTACT_EPSILON = 1e-3;
+
 export interface CourseTriggers {
   outOfWorld: boolean;
   treadmill: number;
@@ -124,8 +138,9 @@ export class WorldCollision {
       const minB = axis === 0 ? solid.minZ : solid.minX;
       const maxB = axis === 0 ? solid.maxZ : solid.maxX;
 
-      if (other + BODY_RADIUS <= minB || other - BODY_RADIUS >= maxB) continue;
-      if (out + BODY_RADIUS <= minA || out - BODY_RADIUS >= maxA) continue;
+      // Touching a face (within float32 error) is not overlapping it.
+      if (other + BODY_RADIUS <= minB + CONTACT_EPSILON || other - BODY_RADIUS >= maxB - CONTACT_EPSILON) continue;
+      if (out + BODY_RADIUS <= minA + CONTACT_EPSILON || out - BODY_RADIUS >= maxA - CONTACT_EPSILON) continue;
 
       const pushLow = minA - BODY_RADIUS;
       const pushHigh = maxA + BODY_RADIUS;

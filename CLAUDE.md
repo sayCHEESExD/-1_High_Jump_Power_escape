@@ -41,6 +41,10 @@ and the world is a **staircase** climbing along +Z through 14 biomes.
 - `LANDING_TOLERANCE` equals `MOVEMENT.stepHeight`. Pads and decks sit under it.
 - Substepping (`maxSubstepDistance`, `maxSubsteps` 96) keeps tall, fast jumps colliding
   reliably. Never "fix" tunnelling by capping jump height.
+- Replicated positions are **float32**, so the client replays from a player a hair inside
+  a face it was stopped against. `resolveAxis` treats overlap within `CONTACT_EPSILON` as
+  touching; without it the other axis shoves the player to the far end of the box every
+  patch (the shop-counter shake). `verify-course` asserts this for walls and risers.
 
 ## World
 
