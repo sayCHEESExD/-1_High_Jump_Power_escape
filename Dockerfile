@@ -3,8 +3,11 @@
 # Built from the REPOSITORY ROOT: this is an npm workspaces monorepo and the
 # server imports `@highjump/shared` as a workspace dependency.
 #
-#   docker build -t tallescape-server .
-#   docker run -e PORT=2571 -p 2571:2571 tallescape-server
+#   docker build -t tall-to-escape-server .
+#   docker run -e PORT=2571 -p 2571:2571 tall-to-escape-server
+#
+# Bloxity Legion injects PORT (and NODE_ENV) at deploy time; the server reads it
+# and serves GET /health on the same port. It runs as the non-root `node` user.
 
 # ---------------------------------------------------------------- build ----
 FROM node:20-alpine AS build

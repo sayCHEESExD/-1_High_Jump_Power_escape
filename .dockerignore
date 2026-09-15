@@ -53,6 +53,7 @@ scripts
 server/data
 
 *.log
+*.zip
 .env
 .DS_Store
 netlify.toml

@@ -102,24 +102,25 @@ long-lived Node process.
 
 ### Bloxity Hosting (GitHub Actions)
 
-`.github/workflows/deploy.yml` deploys game id `tall-escape` on every push,
+`.github/workflows/deploy.yml` deploys game id `tall-to-escape` on every push,
 following [hosting.bloxity.io/docs](https://hosting.bloxity.io/docs):
 
 | Branch | Channel | Backend (Colyseus) | Frontend |
 | --- | --- | --- | --- |
-| `dev` | `dev` | `wss://tall-escape.dev.host.bloxity.io` | `https://tall-escape.dev.play.bloxity.io` |
-| `main` | `prod` | `wss://tall-escape.host.bloxity.io` | `https://tall-escape.play.bloxity.io` |
+| `dev` | `dev` | `wss://tall-to-escape.dev.host.bloxity.io` | `https://tall-to-escape.dev.play.bloxity.io` |
+| `main` | `prod` | `wss://tall-to-escape.host.bloxity.io` | `https://tall-to-escape.play.bloxity.io` |
 
 1. Typecheck and verify.
-2. Build the server image, push `ghcr.io/<owner>/tall-escape-server:<channel>-<sha>`,
-   and roll it with `POST https://legion.bloxity.io/v1/apps/tall-escape/deploy`
+2. Build the server image, push `ghcr.io/<owner>/tall-to-escape-server:<channel>-<sha>`,
+   and roll it with `POST https://legion.bloxity.io/v1/apps/tall-to-escape/deploy`
    (`version` = commit SHA, `seatCap` 15 = the room cap).
-3. Build the client with that channel's `VITE_SERVER_URL`, zip `client/dist` with
-   `index.html` at the root, and upload the raw zip to
-   `POST https://api.bloxity.io/v1/hosting/games/tall-escape/frontend?channel=<channel>&version=<sha>`.
+3. Build the client with that channel's `VITE_SERVER_URL` (and
+   `VITE_BLOXITY_GAME_ID=tall-to-escape`), zip `client/dist` with `index.html` at the
+   root, and upload the raw zip to
+   `POST https://api.bloxity.io/v1/hosting/games/tall-to-escape/frontend?channel=<channel>&version=<sha>`.
 
 The only secret is `LEGION_DEPLOY_TOKEN`. After the first push, make the GHCR package
-public so Legion can pull it. The `tall-escape` game id must exist on Bloxity first.
+public so Legion can pull it. The `tall-to-escape` game id must exist on Bloxity first.
 
 ### Bloxity SDK
 
