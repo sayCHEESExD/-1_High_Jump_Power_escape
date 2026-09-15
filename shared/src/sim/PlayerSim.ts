@@ -1,5 +1,6 @@
+import { bodyBaseAt, canJumpAt } from '../config/course.js';
+import { diningSeatAt } from '../config/dining.js';
 import { MOVEMENT } from '../config/movement.js';
-import { treadmillAt } from '../config/treadmills.js';
 import { BODY_HEIGHT, SPAWN_POSITION, SPAWN_ROTATION_Y } from '../constants/world.js';
 import { rotateTowards } from '../types/math.js';
 import type { WorldCollision } from './WorldCollision.js';
@@ -11,10 +12,12 @@ import type { WorldCollision } from './WorldCollision.js';
  * runs the identical function to predict, so the two can only disagree through
  * inputs, never through different maths. Allocation-free.
  *
- * The one mechanic this game adds is MULTI-JUMP: the first jump leaves the
- * ground, and every further press while airborne is an AIR JUMP (a backflip on
- * screen) that re-launches at full jump velocity, up to the player's jump
- * count. Landing refills them.
+ * Tall legs never move the feet: the feet stay on the floor under the stairs.
+ * What the legs change is where the BODY is - on top of them - and the steps
+ * collide with the body only, so a step's front face stops the player until
+ * the legs lift the body over that step, while the legs pass through the
+ * stairs. There is exactly ONE jump - no air jumps - and only in the spawn
+ * area (`canJumpAt`); on the map there is no jumping.
  */
 
 export interface PlayerMotion {
@@ -28,14 +31,10 @@ export interface PlayerMotion {
   grounded: boolean;
   /** Edge-detect for the jump control, so holding it does not re-fire. */
   jumpLatched: boolean;
-  /** Jumps spent in the current airborne window. 0 on the ground. */
-  jumpsUsed: number;
-  /** Monotonic count of jumps started (ground and air). */
+  /** Monotonic count of jumps started, so remotes can play the jump. */
   jumpCount: number;
-  /** Monotonic count of AIR jumps, so remotes can play the backflip. */
-  flipCount: number;
-  /** Treadmill underfoot, derived from position every step. */
-  treadmill: number;
+  /** Dining table the player is seated at, derived from position every step. */
+  dining: number;
   /** Seconds of coyote time left. */
   coyote: number;
 }
@@ -51,12 +50,12 @@ export interface MovementInput {
 export interface SimParams {
   jumpVelocity: number;
   gravity: number;
-  maxJumps: number;
+  /** Leg reach in world units: where the body sits past the tall line, for stair collision. */
+  legReach: number;
 }
 
 export interface SimEvents {
   jumpStarted: boolean;
-  airJumped: boolean;
   landed: boolean;
 }
 
@@ -72,16 +71,13 @@ export const createMotion = (): PlayerMotion => ({
   yaw: SPAWN_ROTATION_Y,
   grounded: true,
   jumpLatched: false,
-  jumpsUsed: 0,
   jumpCount: 0,
-  flipCount: 0,
-  treadmill: 0,
+  dining: 0,
   coyote: 0,
 });
 
 export const createSimEvents = (): SimEvents => ({
   jumpStarted: false,
-  airJumped: false,
   landed: false,
 });
 
@@ -102,10 +98,8 @@ export const copyMotion = (from: PlayerMotion, to: PlayerMotion): void => {
   to.yaw = from.yaw;
   to.grounded = from.grounded;
   to.jumpLatched = from.jumpLatched;
-  to.jumpsUsed = from.jumpsUsed;
   to.jumpCount = from.jumpCount;
-  to.flipCount = from.flipCount;
-  to.treadmill = from.treadmill;
+  to.dining = from.dining;
   to.coyote = from.coyote;
 };
 
@@ -125,8 +119,7 @@ export const resetMotion = (
   motion.yaw = yaw;
   motion.grounded = true;
   motion.jumpLatched = false;
-  motion.jumpsUsed = 0;
-  motion.treadmill = 0;
+  motion.dining = 0;
   motion.coyote = 0;
 };
 
@@ -163,7 +156,6 @@ export const stepPlayer = (
   events: SimEvents,
 ): void => {
   events.jumpStarted = false;
-  events.airJumped = false;
   events.landed = false;
 
   const dt = Number.isFinite(delta) ? Math.min(Math.max(delta, 0), MAX_SIM_DELTA) : 0;
@@ -179,24 +171,19 @@ export const stepPlayer = (
   if (motion.vy < -terminal) motion.vy = -terminal;
 
   // Substep until no substep travels further than `maxSubstepDistance`, so a
-  // late-game jump of hundreds of units per second collides as reliably as a
-  // first hop.
+  // fast fall collides as reliably as a first hop.
   const travel = Math.hypot(motion.vx, motion.vy, motion.vz) * dt;
   const substeps = Math.max(
     1,
     Math.min(Math.ceil(travel / MOVEMENT.maxSubstepDistance), MOVEMENT.maxSubsteps),
   );
   const sub = dt / substeps;
-  for (let i = 0; i < substeps; i += 1) integrate(motion, sub, collision);
+  for (let i = 0; i < substeps; i += 1) integrate(motion, sub, collision, params.legReach);
 
-  if (motion.grounded) {
-    motion.coyote = MOVEMENT.coyoteTime;
-    motion.jumpsUsed = 0;
-  } else {
-    motion.coyote = Math.max(0, motion.coyote - dt);
-  }
+  if (motion.grounded) motion.coyote = MOVEMENT.coyoteTime;
+  else motion.coyote = Math.max(0, motion.coyote - dt);
 
-  motion.treadmill = motion.grounded ? treadmillAt(motion.x, motion.y, motion.z) : 0;
+  motion.dining = motion.grounded ? diningSeatAt(motion.x, motion.y, motion.z) : 0;
 
   if (!wasGrounded && motion.grounded) events.landed = true;
 };
@@ -204,18 +191,20 @@ export const stepPlayer = (
 const safe = (value: number, fallback: number): number =>
   Number.isFinite(value) && value > 0 ? value : fallback;
 
-const integrate = (motion: PlayerMotion, dt: number, collision: WorldCollision): void => {
+const integrate = (motion: PlayerMotion, dt: number, collision: WorldCollision, legReach: number): void => {
   const previousY = motion.y;
+  // Where the body sits for stair collision, measured where this substep starts.
+  const bodyBase = bodyBaseAt(motion.x, motion.z, legReach);
 
   motion.x += motion.vx * dt;
-  const correctedX = collision.resolveAxis(0, motion.x, motion.z, motion.y);
+  const correctedX = collision.resolveAxis(0, motion.x, motion.z, motion.y, bodyBase);
   if (correctedX !== motion.x) {
     motion.x = correctedX;
     motion.vx = 0;
   }
 
   motion.z += motion.vz * dt;
-  const correctedZ = collision.resolveAxis(2, motion.z, motion.x, motion.y);
+  const correctedZ = collision.resolveAxis(2, motion.z, motion.x, motion.y, bodyBase);
   if (correctedZ !== motion.z) {
     motion.z = correctedZ;
     motion.vz = 0;
@@ -232,10 +221,11 @@ const integrate = (motion: PlayerMotion, dt: number, collision: WorldCollision):
 };
 
 /**
- * Ground jump, or an air jump if the player has jumps left.
+ * THE jump: one, from the ground (or within coyote time), in the spawn area.
+ * A press while airborne does nothing - there are no air jumps.
  *
- * Decided from the simulation's own state, so a client cannot conjure an extra
- * jump whatever it sends - the most it can do is predict one the server refuses.
+ * Decided from the simulation's own state, so a client cannot conjure a jump
+ * whatever it sends - the most it can do is predict one the server refuses.
  */
 const applyJump = (
   motion: PlayerMotion,
@@ -246,29 +236,15 @@ const applyJump = (
   const pressed = input.jump && !motion.jumpLatched;
   motion.jumpLatched = input.jump;
   if (!pressed) return;
+  // Jumping only exists in the spawn area; on the map a press does nothing.
+  if (!canJumpAt(motion.z)) return;
+  if (!motion.grounded && motion.coyote <= 0) return;
 
-  const velocity = safe(params.jumpVelocity, 40);
-
-  if (motion.grounded || motion.coyote > 0) {
-    motion.vy = velocity;
-    motion.grounded = false;
-    motion.coyote = 0;
-    motion.jumpsUsed = 1;
-    motion.jumpCount += 1;
-    events.jumpStarted = true;
-    return;
-  }
-
-  // Walking off a ledge spends the ground jump.
-  if (motion.jumpsUsed < 1) motion.jumpsUsed = 1;
-  const allowed = Math.max(1, Math.floor(safe(params.maxJumps, 1)));
-  if (motion.jumpsUsed >= allowed) return;
-
-  motion.jumpsUsed += 1;
-  motion.vy = velocity;
+  motion.vy = safe(params.jumpVelocity, 40);
+  motion.grounded = false;
+  motion.coyote = 0;
   motion.jumpCount += 1;
-  motion.flipCount += 1;
-  events.airJumped = true;
+  events.jumpStarted = true;
 };
 
 const applyHorizontal = (motion: PlayerMotion, input: MovementInput, dt: number): void => {

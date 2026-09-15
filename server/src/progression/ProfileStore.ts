@@ -1,4 +1,4 @@
-import { parseEquipment, encodeEquipment } from '@highjump/shared';
+import { encodePets, foodMask, parsePets, STARTER_FOOD } from '@highjump/shared';
 import { createPersistence, type PersistenceAdapter, type StoredProfile } from '../persistence/index.js';
 import type { PlayerState } from '../rooms/state/PlayerState.js';
 
@@ -32,17 +32,15 @@ class ProfileStore {
     const profile = this.profiles.get(playerId);
     if (!profile) return false;
     player.level = Math.max(1, Math.floor(profile.level));
-    player.energy = profile.energy;
+    player.food = profile.food;
     player.rebirths = Math.floor(profile.rebirths);
     player.wins = Math.floor(profile.wins);
     player.playSeconds = profile.playSeconds;
-    player.ownedBoots = profile.ownedBoots & 0xffff;
+    player.ownedFoods = (profile.ownedFoods | foodMask(STARTER_FOOD)) & 0xffff;
     player.ownedTrails = profile.ownedTrails & 0xffff;
     player.trailSlot = profile.trailSlot & 0xff;
-    player.ownedAuras = profile.ownedAuras & 0xffff;
-    player.auraSlot = profile.auraSlot & 0xff;
-    // Re-encoded, so an item removed from the pool since the save simply drops.
-    player.equipment = encodeEquipment(parseEquipment(profile.equipment));
+    // Re-encoded, so a pet removed from the table since the save simply drops.
+    player.pets = encodePets(parsePets(profile.pets));
     return true;
   }
 
@@ -50,16 +48,14 @@ class ProfileStore {
     if (!playerId) return;
     this.profiles.set(playerId, {
       level: player.level,
-      energy: player.energy,
+      food: player.food,
       rebirths: player.rebirths,
       wins: player.wins,
       playSeconds: player.playSeconds,
-      ownedBoots: player.ownedBoots,
+      ownedFoods: player.ownedFoods,
       ownedTrails: player.ownedTrails,
       trailSlot: player.trailSlot,
-      ownedAuras: player.ownedAuras,
-      auraSlot: player.auraSlot,
-      equipment: player.equipment,
+      pets: player.pets,
       updatedAt: Date.now(),
     });
     this.adapter.save(this.profiles);

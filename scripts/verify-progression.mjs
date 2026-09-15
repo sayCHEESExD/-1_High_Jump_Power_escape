@@ -1,40 +1,49 @@
 /**
  * The progression tables and curves, checked without a server.
  *
- * What these get wrong is never a crash - it is a price off by a zero, a jump
- * count that skips a rebirth, a height curve that no longer says level 15 is
- * 36. This suite pins every figure the design specifies.
+ * What these get wrong is never a crash - it is a price off by a zero, a
+ * height curve that no longer says level 73 is 3.6K, a pet chance table that
+ * sums to 99. This suite pins every figure the design specifies.
  *
  * Run with `npm run verify:progression`.
  */
 import {
-  AURA_TIERS,
-  BOOT_TIERS,
-  ITEM_POOL,
+  DINING_TIERS,
+  EGGS,
+  FOOD_TIERS,
+  JUMP_HEIGHT,
   MAX_WINS,
-  SHOP,
+  PETS,
+  PET_LIMITS,
+  REBIRTH,
+  STEP_WINS,
   TRAIL_TIERS,
-  bestOwnedBoot,
-  bootMask,
+  bestOwnedFood,
   canRebirth,
-  encodeEquipment,
-  energyForNextLevel,
-  energyPerStepFor,
-  equipBest,
-  equipmentHeightBonus,
+  diningRate,
+  encodePets,
+  equipAllPets,
+  equipBestPets,
+  equippedPetIds,
+  foodForNextLevel,
+  foodMask,
+  foodPerStepFor,
   formatNumber,
-  levelHeight,
-  maxJumpsForRebirth,
-  parseEquipment,
+  isFoodOwned,
+  legReach,
+  parsePets,
+  petFoodMultiplier,
+  petWinsMultiplier,
+  petsInEgg,
   rebirthCostMultiplier,
+  rebirthHeightMultiplier,
   rebirthRequiredLevel,
+  resolveFoodRate,
   resolveHeight,
   resolveJumpPhysics,
   resolveWinReward,
-  shopSecondsLeft,
-  shopSlotAt,
-  spendEnergy,
-  stockForSlot,
+  rollPet,
+  spendFood,
 } from '../shared/dist/index.js';
 
 let failures = 0;
@@ -48,69 +57,75 @@ const check = (label, condition, detail = '') => {
 };
 const increasing = (list) => list.every((value, i) => i === 0 || value > list[i - 1]);
 
-console.log('\nheight and levels\n');
+console.log('\nheight, food and levels\n');
 
-check('level 15 = height 36', levelHeight(15) === 36, `got ${levelHeight(15)}`);
-check('level 16 = height 38', levelHeight(16) === 38);
-check('level 17 = height 40', levelHeight(17) === 40);
-check('each level adds 2 height', levelHeight(100) - levelHeight(99) === 2);
-check('equipment adds a percentage of height', Math.abs(resolveHeight(15, 10) - 39.6) < 1e-9);
+check('level 73 = 3.6K height', formatNumber(resolveHeight(73)) === '3.6K', `${resolveHeight(73)}`);
+check('level 74 = 3.7K height', formatNumber(resolveHeight(74)) === '3.7K', `${resolveHeight(74)}`);
+check('height rises every level', increasing(Array.from({ length: 1300 }, (_, i) => resolveHeight(i + 1))));
+check('level 73 needs 210 food for the next level', foodForNextLevel(73, 0) === 210, `${foodForNextLevel(73, 0)}`);
+check('level 74 needs 222 food', foodForNextLevel(74, 0) === 222, `${foodForNextLevel(74, 0)}`);
+check('level cost never falls', Array.from({ length: 1300 }, (_, i) => foodForNextLevel(i + 1, 0)).every((v, i, a) => i === 0 || v >= a[i - 1]));
+check('level cost rises every level from 20 on', increasing(Array.from({ length: 1200 }, (_, i) => foodForNextLevel(i + 20, 0))));
+check('the rebirth multiplier scales the whole cost', foodForNextLevel(73, 1) === Math.round((73 + 137) * 1.5));
 {
-  const near = (level, target) => Math.abs(energyForNextLevel(level, 0) - target) / target <= 0.05;
-  check(
-    'level costs match the reference: 22 = 1.98K, 23 = 2.45K, 24 = 2.9K, 25 = 3.5K (within 5%)',
-    near(22, 1980) && near(23, 2450) && near(24, 2900) && near(25, 3500),
-    [22, 23, 24, 25].map((l) => energyForNextLevel(l, 0)).join(', '),
-  );
-  const total = Array.from({ length: 24 }, (_, i) => energyForNextLevel(i + 1, 0)).reduce((a, b) => a + b, 0);
-  check('reaching level 25 takes well over 10K energy', total > 10_000, `${total}`);
-  check('the rebirth multiplier still scales the whole cost', energyForNextLevel(22, 1) === Math.round((30 * 22 + 1320) * 1.5));
+  const cost = foodForNextLevel(1, 0) + foodForNextLevel(2, 0);
+  const result = spendFood(1, cost + 1, 0);
+  check('banked food is spent on as many levels as it covers', result.level === 3 && result.food === 1, JSON.stringify(result));
+  check('short of a level, nothing is spent', spendFood(90, 1, 0).level === 90 && spendFood(90, 1, 0).food === 1);
 }
-check(
-  'level cost rises every level',
-  increasing(Array.from({ length: 200 }, (_, i) => energyForNextLevel(i + 1, 0))),
-);
+check('leg reach grows with level', increasing(Array.from({ length: 1300 }, (_, i) => legReach(i + 1))));
+check('level-1 legs are already much taller than the body', legReach(1) > 5);
+
+console.log('\njump\n');
 {
-  const cost = energyForNextLevel(1, 0) + energyForNextLevel(2, 0);
-  const result = spendEnergy(1, cost + 1, 0);
-  check('banked energy is spent on as many levels as it covers', result.level === 3 && result.energy === 1, JSON.stringify(result));
-  check('short of a level, nothing is spent', spendEnergy(5, 1, 0).level === 5 && spendEnergy(5, 1, 0).energy === 1);
-}
-
-console.log('\njump physics\n');
-
-for (const height of [8, 36, 300, 2000]) {
-  const physics = resolveJumpPhysics(height);
+  const physics = resolveJumpPhysics(JUMP_HEIGHT);
   const apex = (physics.velocity * physics.velocity) / (2 * physics.gravity);
-  check(`a height-${height} jump peaks at exactly ${height}`, Math.abs(apex - height) < 1e-6, `apex ${apex}`);
-  const rise = physics.velocity / physics.gravity;
-  check(`and rises in under a second (${rise.toFixed(2)}s)`, rise > 0.3 && rise <= 0.85);
+  check(`a jump peaks at exactly ${JUMP_HEIGHT}`, Math.abs(apex - JUMP_HEIGHT) < 1e-6, `apex ${apex}`);
 }
 
 console.log('\nrebirth\n');
 
-check('energy cost multiplier x1, x1.5, x2, x2.5', [1, 1.5, 2, 2.5].every((m, r) => rebirthCostMultiplier(r) === m));
+check('food cost multiplier x1, x1.5, x2, x2.5', [1, 1.5, 2, 2.5].every((m, r) => rebirthCostMultiplier(r) === m));
 check('and +0.5 per rebirth after that', rebirthCostMultiplier(10) === 6);
-check(
-  'jumps: R0 1, R1 2, R2 2, R3 3, R4 3, R5 4',
-  [1, 2, 2, 3, 3, 4].every((j, r) => maxJumpsForRebirth(r) === j),
-  [0, 1, 2, 3, 4, 5].map(maxJumpsForRebirth).join(','),
-);
+check('rebirth grants no jumps (there is no jump-count progression)', !Object.keys(REBIRTH).some((key) => /jump/i.test(key)));
 check('the rebirth level requirement never falls', Array.from({ length: 30 }, (_, r) => rebirthRequiredLevel(r)).every((v, i, a) => i === 0 || v >= a[i - 1]));
-check('rebirth 2 -> 3 needs level 25, as in the reference', rebirthRequiredLevel(2) === 25);
-check('later rebirths ask for more', rebirthRequiredLevel(10) > rebirthRequiredLevel(2));
+check(
+  'rebirth requirements climb 25, 50, 75, 100, 125 (1st to 5th rebirth)',
+  [25, 50, 75, 100, 125].every((level, done) => rebirthRequiredLevel(done) === level),
+  [0, 1, 2, 3, 4].map(rebirthRequiredLevel).join(', '),
+);
+check('every rebirth asks for more than the last', Array.from({ length: 50 }, (_, r) => rebirthRequiredLevel(r)).every((v, i, a) => i === 0 || v > a[i - 1]));
 check('refused below the requirement, allowed at it', !canRebirth(24, 0) && canRebirth(25, 0));
+check('height multiplier x1, x1.5, x2, x2.5 per rebirth', [1, 1.5, 2, 2.5].every((m, r) => rebirthHeightMultiplier(r) === m));
+check('a rebirth multiplies the height figure', resolveHeight(73, 1) === Math.round(3599.8 * 1.5) || Math.abs(resolveHeight(73, 1) - 5400) <= 1, `${resolveHeight(73, 1)}`);
+check('and the leg reach', Math.abs(legReach(50, 2) - legReach(50) * 2) < 1e-9);
 
-console.log('\nboots\n');
+console.log('\nfoods\n');
 
-check('ten boots', BOOT_TIERS.length === 10);
-check('boot 1: 3 wins, +3/step', BOOT_TIERS[0].cost === 3 && BOOT_TIERS[0].energyPerStep === 3);
-check('boot 2: 10 wins, +6/step', BOOT_TIERS[1].cost === 10 && BOOT_TIERS[1].energyPerStep === 6);
-check('prices and bonuses both climb', increasing(BOOT_TIERS.map((t) => t.cost)) && increasing(BOOT_TIERS.map((t) => t.energyPerStep)));
-check('barefoot earns 1/step', energyPerStepFor(0) === 1);
-check('the best owned boot is worn', bestOwnedBoot(bootMask(2) | bootMask(7))?.slot === 7);
+const FOOD_SPEC = [
+  ['Lettuce', 1, 0], ['Bread', 3, 2], ['Apple', 10, 8], ['Lollipop', 35, 40], ['Sandwich', 125, 125],
+  ['Hot Dog', 400, 600], ['Steak', 1_500, 2_500], ['Chocolate Bar', 5_000, 8_000], ['Cupcake', 18_000, 30_000],
+  ['Pizza', 60_000, 100_000], ['Cake', 200_000, 400_000], ['Diamond Donut', 750_000, 1_500_000],
+  ['Golden Apple', 3_000_000, 6_000_000], ['Rainbow Ice Cream', 12_000_000, 25_000_000], ['Galaxy Burger', 50_000_000, 100_000_000],
+];
+check('fifteen foods', FOOD_TIERS.length === FOOD_SPEC.length);
+check(
+  'names, food per step and prices match the spec',
+  FOOD_SPEC.every(([name, perStep, cost], i) => FOOD_TIERS[i]?.name === name && FOOD_TIERS[i]?.foodPerStep === perStep && FOOD_TIERS[i]?.cost === cost),
+);
+check('Lettuce is owned from the start', isFoodOwned(0, 1) && bestOwnedFood(0).name === 'Lettuce' && foodPerStepFor(0) === 1);
+check('the best owned food is held', bestOwnedFood(foodMask(2) | foodMask(7)).name === 'Steak');
+check('food per step follows the held food', foodPerStepFor(foodMask(5)) === 125);
 
-console.log('\ntrails (energy multiplier)\n');
+console.log('\ndining tables\n');
+
+check('4 tables: 1x / 3x / 5x / 7x', [1, 3, 5, 7].every((m, i) => DINING_TIERS[i]?.multiplier === m));
+check('unlocked at 0 / 2 / 5 / 10 rebirths', [0, 2, 5, 10].every((r, i) => DINING_TIERS[i]?.rebirthsRequired === r));
+check('a locked table pays nothing', diningRate(2, 1) === 0 && diningRate(4, 9) === 0);
+check('an unlocked table pays its multiplier', diningRate(2, 2) === 3 && diningRate(4, 10) === 7);
+check('the names say Height Power', DINING_TIERS.every((t) => t.name === `${t.multiplier}x Height Power`));
+
+console.log('\ntrails (food multiplier)\n');
 
 const TRAIL_SPEC = [
   ['Green', 30], ['Blue', 350], ['Purple', 1_500], ['White', 8_500], ['Black', 45_000], ['Gold', 350_000],
@@ -118,56 +133,65 @@ const TRAIL_SPEC = [
   ['Music', 800_000_000_000],
 ];
 check('eleven trails', TRAIL_TIERS.length === TRAIL_SPEC.length);
-check(
-  'names and prices match the spec',
-  TRAIL_SPEC.every(([name, cost], i) => TRAIL_TIERS[i]?.name.startsWith(name) && TRAIL_TIERS[i]?.cost === cost),
-);
+check('names and prices kept', TRAIL_SPEC.every(([name, cost], i) => TRAIL_TIERS[i]?.name.startsWith(name) && TRAIL_TIERS[i]?.cost === cost));
 check('multipliers climb', increasing(TRAIL_TIERS.map((t) => t.multiplier)));
 
-console.log('\nauras (win multiplier)\n');
+console.log('\neggs and pets\n');
 
-const AURA_SPEC = [
-  ['Nature', 150], ['Burning', 1_500], ['Crystal', 12_000], ['Lightning', 105_000], ['Ghost', 850_000],
-  ['Time', 12_000_000], ['Toxic', 150_000_000], ['Sakura', 1_000_000_000], ['Black Flash', 9_500_000_000],
-  ['Void', 520_000_000_000], ['Magic', 1_000_000_000_000],
-];
-check('eleven auras', AURA_TIERS.length === AURA_SPEC.length);
-check('names and prices match the spec', AURA_SPEC.every(([name, cost], i) => AURA_TIERS[i]?.name === name && AURA_TIERS[i]?.cost === cost));
-check('multipliers climb', increasing(AURA_TIERS.map((t) => t.multiplier)));
-check('an unowned aura pays no bonus', resolveWinReward(40, 1, 0) === 40);
-check('an owned aura multiplies the reward', resolveWinReward(40, 1, 1) === 50);
-check('the biggest price is still an exact integer', Number.isSafeInteger(AURA_TIERS.at(-1).cost) && MAX_WINS >= AURA_TIERS.at(-1).cost);
-
-console.log('\nequipment\n');
-
-check('the pool has rarity, name, price and height bonus', ITEM_POOL.every((i) => i.rarity && i.name && i.price > 0 && i.heightBonus > 0));
+const EGG_SPEC = [['Meadow Egg', 1_000], ['Mystery Egg', 60_000], ['Jungle Egg', 40_000_000], ['Desert Egg', 150_000_000], ['Ocean Egg', 8_000_000_000]];
+check('five eggs with the spec names and prices', EGGS.length === 5 && EGG_SPEC.every(([name, cost], i) => EGGS[i]?.name === name && EGGS[i]?.cost === cost));
+check('every egg holds four pets', EGGS.every((egg) => petsInEgg(egg.slot).length === 4));
+check('every egg\'s chances sum to 100', EGGS.every((egg) => petsInEgg(egg.slot).reduce((s, p) => s + p.chance, 0) === 100));
 check(
-  'the reference items exist',
-  ['Magic Ice:7:800', 'Fossil:6:800', 'Crystal:4:50', 'Forest Gem:3:50'].every((spec) => {
-    const [name, bonus, price] = spec.split(':');
-    return ITEM_POOL.some((i) => i.name === name && i.heightBonus === Number(bonus) && i.price === Number(price));
+  'rarer pets are less likely and stronger',
+  EGGS.every((egg) => {
+    const pool = petsInEgg(egg.slot);
+    return pool.every((p, i) => i === 0 || (p.chance < pool[i - 1].chance && p.food > pool[i - 1].food && p.wins >= pool[i - 1].wins));
   }),
 );
-check('the shop restocks every 5 minutes', SHOP.restockSeconds === 300);
-check('three items owned at most', SHOP.maxOwned === 3);
+check(
+  "each egg's common pet beats the previous egg's legendary on food",
+  EGGS.every((egg, i) => i === 0 || petsInEgg(egg.slot)[0].food > petsInEgg(EGGS[i - 1].slot)[3].food),
+);
+check('pet ids are unique', new Set(PETS.map((p) => p.id)).size === PETS.length);
+check('a low roll hatches the common pet', rollPet(1, () => 0)?.rarity === 'Common');
+check('a top roll hatches the legendary', rollPet(1, () => 0.9999)?.rarity === 'Legendary');
 {
-  const a = stockForSlot(12345).map((i) => i.id);
-  const b = stockForSlot(12345).map((i) => i.id);
-  check('a restock is deterministic', a.join() === b.join());
-  check('a restock has three distinct items', a.length === 3 && new Set(a).size === 3, a.join());
-  const distinct = new Set();
-  for (let slot = 0; slot < 200; slot += 1) distinct.add(stockForSlot(slot).map((i) => i.id).join());
-  check('restocks vary', distinct.size > 20, `${distinct.size} different shelves in 200`);
-  check('the slot and countdown agree', shopSlotAt(300_000) === 1 && shopSecondsLeft(299_000) === 1);
+  const counts = new Map();
+  let seed = 7;
+  const random = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+  for (let i = 0; i < 20_000; i += 1) {
+    const pet = rollPet(2, random);
+    counts.set(pet.rarity, (counts.get(pet.rarity) ?? 0) + 1);
+  }
+  const share = (rarity) => (counts.get(rarity) ?? 0) / 20_000;
+  check('rolls follow the chance table (60/28/10/2 within 2%)', Math.abs(share('Common') - 0.6) < 0.02 && Math.abs(share('Legendary') - 0.02) < 0.01, JSON.stringify([...counts]));
 }
+check('3 pets equipped at most', PET_LIMITS.maxEquipped === 3);
 {
-  const items = parseEquipment('crystal,fossil*,feather,magic_ice*');
-  check('parsing caps the backpack at three', items.length === 3);
-  check('encoding round-trips', encodeEquipment(parseEquipment('crystal,fossil*')) === 'crystal,fossil*');
-  check('unknown items are dropped', parseEquipment('nope*,crystal').length === 1);
-  check('only equipped items add height', equipmentHeightBonus('crystal,fossil*') === 6);
-  check('best equip wears all three best', encodeEquipment(equipBest(parseEquipment('crystal,fossil,feather'))) === 'crystal*,fossil*,feather*');
+  const pets = parsePets('cat*,bunny*,owl*,tiger*,kraken');
+  check('parsing never equips more than three', pets.filter((p) => p.equipped).length === 3);
+  check('encoding round-trips', encodePets(parsePets('cat*,bunny')) === 'cat*,bunny');
+  check('unknown pets are dropped', parsePets('nope*,cat').length === 1);
+  check('duplicates are separate pets', parsePets('cat,cat,cat').length === 3);
+  check('bonuses of equipped pets add up', Math.abs(petFoodMultiplier('cat*,cat*') - (1 + 0.7 * 2)) < 1e-9);
+  check('the best possible pets (3 Krakens) stay a modest boost: x43 food', Math.abs(petFoodMultiplier('kraken*,kraken*,kraken*') - 43) < 1e-9);
+  const lollipop = FOOD_TIERS.find((f) => f.name === 'Lollipop');
+  check('Lollipop with no pets or trail pays exactly its stated 35 per step', resolveFoodRate(foodMask(lollipop.slot), 0, 0, '').perStep === 35 && lollipop.foodPerStep === 35);
+  check('Lollipop + Cat, Owl, Crab = 35 x 10.6 (pets are the only multiplier)', Math.abs(resolveFoodRate(foodMask(lollipop.slot), 0, 0, 'cat*,owl*,crab*').perStep - 35 * 10.6) < 1e-9);
+  check('level and rebirths cannot reach the food rate (it takes no such inputs)', resolveFoodRate.length === 4);
+  check('unequipped pets add nothing', petFoodMultiplier('kraken') === 1 && petWinsMultiplier('kraken') === 1);
+  check('Equip Best wears the three strongest', equippedPetIds(encodePets(equipBestPets(parsePets('bunny,kraken,cat,shark,chick')))).sort().join() === 'cat,kraken,shark');
+  check('Equip All fills the free slots only', encodePets(equipAllPets(parsePets('bunny*,cat,owl,tiger'))) === 'bunny*,cat*,owl*,tiger');
+  check('the pets multiply win rewards', resolveWinReward(20, 'golden_fox*') === Math.floor(20 * 1.3));
+  check('a win reward saturates at MAX_WINS', resolveWinReward(MAX_WINS, 'kraken*,kraken*,kraken*') === MAX_WINS);
 }
+
+console.log('\nstep rewards\n');
+
+check('step rewards start 1, 3, 8, 20, 50, 120, 200, 400', [1, 3, 8, 20, 50, 120, 200, 400].every((w, i) => STEP_WINS[i] === w));
+check('step rewards strictly increase', increasing(STEP_WINS));
+check('the top step pays enough to make the Ocean Egg a goal', STEP_WINS.at(-1) >= 1_000_000_000 && STEP_WINS.at(-1) < EGGS[4].cost);
 
 console.log('\nformatting\n');
 

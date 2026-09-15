@@ -19,7 +19,7 @@ const SCOPE = 'bloxity';
  * override it at build time; the literal is what a local `npm run dev` uses.
  */
 export const GAME_SLUG =
-  (import.meta.env['VITE_BLOXITY_GAME_ID'] as string | undefined)?.trim() || 'high-jump-power-escape';
+  (import.meta.env['VITE_BLOXITY_GAME_ID'] as string | undefined)?.trim() || 'tall-escape';
 
 /**
  * Optional backend overrides, unset in every normal build.

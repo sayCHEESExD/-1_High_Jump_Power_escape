@@ -1,9 +1,13 @@
 import {
-  AURA_TIERS,
   MessageType,
+  STAIRS,
+  STAIR_START_Z,
+  STEPS,
   TRAIL_TIERS,
-  bestOwnedBoot,
+  bestOwnedFood,
   formatNumber,
+  petById,
+  type PetHatchedMessage,
   type WinAwardedMessage,
 } from '@highjump/shared';
 import { AudioManager } from '../audio/AudioManager.js';
@@ -23,18 +27,18 @@ import { RunController } from '../progression/RunController.js';
 import { LandingDebris } from '../rendering/LandingDebris.js';
 import { RendererManager } from '../rendering/RendererManager.js';
 import { SceneManager } from '../rendering/SceneManager.js';
-import { BackpackPanel } from '../ui/BackpackPanel.js';
+import { TrophyBurst } from '../rendering/TrophyBurst.js';
 import { BloxityPanel } from '../ui/BloxityPanel.js';
 import { CosmeticPanel } from '../ui/CosmeticPanel.js';
-import { EnergyHud } from '../ui/EnergyHud.js';
-import { EnergyPopups } from '../ui/EnergyPopups.js';
+import { EggShopPanel } from '../ui/EggShopPanel.js';
+import { FoodHud } from '../ui/FoodHud.js';
+import { FoodPopups } from '../ui/FoodPopups.js';
 import { ICONS, injectHudStyles } from '../ui/hudStyles.js';
-import { ItemShopPanel } from '../ui/ItemShopPanel.js';
 import { KeyHints, WinBanner } from '../ui/Overlays.js';
 import { Panel, anyPanelOpen } from '../ui/Panel.js';
+import { PetsPanel } from '../ui/PetsPanel.js';
 import { RailButton } from '../ui/RailButton.js';
 import { RebirthPanel } from '../ui/RebirthPanel.js';
-import { TrophyBurst } from '../rendering/TrophyBurst.js';
 import { WinsCounter } from '../ui/WinsCounter.js';
 import { logger } from '../util/logger.js';
 import { CourseWorld } from '../world/CourseWorld.js';
@@ -63,6 +67,9 @@ const isTyping = (target: EventTarget | null): boolean => {
   return element.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName);
 };
 
+/** The recommended level of the first step above this level, or 0 past the top. Informational only. */
+const nextStepLevel = (level: number): number =>
+  STEPS.find((step) => step.recommendedLevel > level)?.recommendedLevel ?? 0;
 
 /**
  * Composition root. Owns every subsystem and the per-frame order - input,
@@ -85,8 +92,8 @@ export class Game {
   /** The shopkeeper NPC. Built once the player model has loaded. */
   private shopkeeper: Shopkeeper | null = null;
 
-  private readonly hud: EnergyHud;
-  private readonly pops: EnergyPopups;
+  private readonly hud: FoodHud;
+  private readonly pops: FoodPopups;
   private readonly wins: WinsCounter;
   /** Trophies popping around the local player when they collect a win. */
   private readonly trophyBurst = new TrophyBurst();
@@ -96,15 +103,13 @@ export class Game {
 
   private readonly rebirthPanel: RebirthPanel;
   private readonly trailPanel: CosmeticPanel;
-  private readonly auraPanel: CosmeticPanel;
-  private readonly backpackPanel: BackpackPanel;
-  private readonly shopPanel: ItemShopPanel;
+  private readonly petsPanel: PetsPanel;
+  private readonly eggPanel: EggShopPanel;
   private readonly panels: Panel[];
 
   private readonly rebirthButton: RailButton;
   private readonly trailButton: RailButton;
-  private readonly auraButton: RailButton;
-  private readonly backpackButton: RailButton;
+  private readonly petsButton: RailButton;
   private readonly audioButton: RailButton;
 
   private localPlayer: LocalPlayer | null = null;
@@ -113,7 +118,8 @@ export class Game {
   private lastLevel = -1;
   private lastRebirths = -1;
   private lastPurchases = '';
-  /** The shop was closed by hand while standing at it; do not reopen until they leave. */
+  private nextLevel = 0;
+  /** The Egg Shop was closed by hand while standing at it; do not reopen until they leave. */
   private shopDismissed = false;
 
   /** The Bloxity bridge. The only thing in the client that talks to the SDK. */
@@ -137,8 +143,8 @@ export class Game {
     this.remotePlayers = new RemotePlayerManager(this.sceneManager.scene);
     this.playerAudio = new PlayerAudio(this.audio);
 
-    this.hud = new EnergyHud(container);
-    this.pops = new EnergyPopups(container);
+    this.hud = new FoodHud(container);
+    this.pops = new FoodPopups(container);
     this.wins = new WinsCounter(container);
     this.banner = new WinBanner(container);
     this.keys = new KeyHints(container);
@@ -161,8 +167,13 @@ export class Game {
         this.remotePlayers.remove(sessionId);
       },
       // Placed at spawn immediately - there is no death animation to wait for.
-      onRespawn: (message) => this.localPlayer?.teleport(message.x, message.y, message.z, message.rotationY),
+      // Every placement starts a new attempt, so every pad can pay once again.
+      onRespawn: (message) => {
+        this.localPlayer?.teleport(message.x, message.y, message.z, message.rotationY);
+        this.run.startAttempt();
+      },
       onWinAwarded: (message) => this.onWinAwarded(message),
+      onPetHatched: (message) => this.onPetHatched(message),
     });
 
     this.fpsReadout = document.createElement('div');
@@ -202,33 +213,25 @@ export class Game {
       variant: 'trail',
       title: 'Trail',
       icon: ICONS.trail,
-      multiplierIcon: ICONS.energy,
+      multiplierIcon: ICONS.food,
       rows: TRAIL_TIERS,
       onBuy: (slot) => this.network.sendSlot(MessageType.BuyTrail, slot),
       onEquip: (slot) => this.network.sendSlot(MessageType.EquipTrail, slot),
     });
-    this.auraPanel = new CosmeticPanel(container, {
-      variant: 'aura',
-      title: 'Aura',
-      icon: ICONS.aura,
-      multiplierIcon: ICONS.trophy,
-      rows: AURA_TIERS,
-      onBuy: (slot) => this.network.sendSlot(MessageType.BuyAura, slot),
-      onEquip: (slot) => this.network.sendSlot(MessageType.EquipAura, slot),
+    this.petsPanel = new PetsPanel(container, {
+      equipBest: () => this.network.sendEmpty(MessageType.EquipBestPets),
+      equipAll: () => this.network.sendEmpty(MessageType.EquipAllPets),
+      toggle: (index) => this.network.sendIndex(MessageType.TogglePet, index),
+      remove: (index) => this.network.sendIndex(MessageType.DeletePet, index),
     });
-    this.backpackPanel = new BackpackPanel(container, {
-      equipBest: () => this.network.equipBest(),
-      toggle: (index) => this.network.sendIndex(MessageType.ToggleItem, index),
-      remove: (index) => this.network.sendIndex(MessageType.DeleteItem, index),
-    });
-    this.shopPanel = new ItemShopPanel(container, (index) => {
+    this.eggPanel = new EggShopPanel(container, (slot) => {
       this.flushInput();
-      this.network.sendIndex(MessageType.BuyItem, index);
+      this.network.sendSlot(MessageType.HatchEgg, slot);
     });
-    this.shopPanel.onClose(() => {
-      if (this.run.atShop) this.shopDismissed = true;
+    this.eggPanel.onClose(() => {
+      if (this.run.atHatchery) this.shopDismissed = true;
     });
-    this.panels = [this.rebirthPanel, this.trailPanel, this.auraPanel, this.backpackPanel, this.shopPanel];
+    this.panels = [this.rebirthPanel, this.trailPanel, this.petsPanel, this.eggPanel];
 
     this.rail = document.createElement('div');
     this.rail.className = 'hj-rail';
@@ -237,8 +240,7 @@ export class Game {
       new RailButton(this.rail, { variant, label, icon, hotkey, onClick });
     this.rebirthButton = tile('rebirth', 'Rebirth', ICONS.rebirth, 'R', () => this.openOnly(this.rebirthPanel));
     this.trailButton = tile('trail', 'Trail', ICONS.trail, 'T', () => this.openOnly(this.trailPanel));
-    this.auraButton = tile('aura', 'Aura', ICONS.aura, 'Y', () => this.openOnly(this.auraPanel));
-    this.backpackButton = tile('backpack', 'Backpack', ICONS.backpack, 'B', () => this.openOnly(this.backpackPanel));
+    this.petsButton = tile('pets', 'Pets', ICONS.pets, 'P', () => this.openOnly(this.petsPanel));
     this.audioButton = tile('audio', 'Mute', ICONS.audio, 'M', () => {
       const muted = this.audio.toggleMuted();
       this.audioButton.root.classList.toggle('hj-tile--off', muted);
@@ -247,24 +249,24 @@ export class Game {
     this.audioButton.root.classList.toggle('hj-tile--off', this.audio.isMuted);
 
     this.run = new RunController(this.world.collision, {
-      claimWin: (biome) => {
+      claimWin: (step) => {
         // The server validates against the last position it SIMULATED.
         this.flushInput();
-        this.network.claimWin(biome);
+        this.network.claimWin(step);
       },
-      buyBoot: (slot) => {
+      buyFood: (slot) => {
         this.flushInput();
-        this.network.sendSlot(MessageType.BuyBoot, slot);
+        this.network.sendSlot(MessageType.BuyFood, slot);
       },
-      enterShop: () => {
+      enterHatchery: () => {
         if (!this.shopDismissed && !anyPanelOpen()) {
-          this.shopPanel.setOpen(true);
+          this.eggPanel.setOpen(true);
           this.audio.play('ui');
         }
       },
-      leaveShop: () => {
+      leaveHatchery: () => {
         this.shopDismissed = false;
-        this.shopPanel.setOpen(false);
+        this.eggPanel.setOpen(false);
       },
     });
 
@@ -342,8 +344,9 @@ export class Game {
 
     if (player) {
       player.update(delta, input, this.input.look.yaw);
-      const kind = player.jumpKind;
-      if (kind !== 'none') this.playerAudio.jumped(kind === 'air');
+      // No jumping on the map: hide the touch jump button there.
+      document.body.classList.toggle('hj-no-jump', !player.canJump);
+      if (player.jumped) this.playerAudio.jumped();
       // Landing impact: rubble, dust and a short shake, together on the frame
       // of touchdown. Local only; the sound is played by PlayerAudio below.
       const impact = player.landingImpact;
@@ -358,26 +361,22 @@ export class Game {
       const placement = player.consumePlacement();
       if (placement !== 'none') this.camera.snapTo(player.position, placement === 'respawn');
       this.camera.setTarget(player.position);
+      // The legs drawn right now: the camera and the fog pull back with them.
+      this.camera.setLegExtra(player.legExtra);
+      // Between the staircase walls, the camera stays between them too.
+      this.camera.setCorridor(player.position.z >= STAIR_START_Z - 2 ? STAIRS.width / 2 - 1.5 : 0);
+      this.sceneManager.setLegExtra(player.legExtra);
       this.sceneManager.followShadow(player.position.x, player.position.y, player.position.z);
       this.flushInput();
       this.playerAudio.update(delta, player);
 
       const state = this.localState;
       if (state) {
-        this.hud.update(state.level, state.energy, state.rebirths, state.height, state.maxJumps, player.jumpsLeft);
-        this.shopPanel.sync(
-          this.network.shopSlot,
-          this.network.shopRemaining,
-          state.wins,
-          state.equipment,
-          state.shopBoughtSlot,
-          state.shopBoughtMask,
-          this.run.atShop,
-        );
+        this.hud.update(state.level, state.food, state.rebirths, state.height, state.foodPerStep, this.nextLevel);
+        this.eggPanel.sync(state.wins, state.pets, this.run.atHatchery);
       }
     }
 
-    this.shopPanel.tick(delta);
     this.world.scoreboard.update(this.network.leaderboard);
     this.pops.update(delta);
     this.debris.update(delta);
@@ -399,11 +398,8 @@ export class Game {
       case 't':
         this.trailButton.press();
         break;
-      case 'y':
-        this.auraButton.press();
-        break;
-      case 'b':
-        this.backpackButton.press();
+      case 'p':
+        this.petsButton.press();
         break;
       case 'm':
         this.audioButton.press();
@@ -466,9 +462,10 @@ export class Game {
     if (!player) return;
     this.localState = state;
 
-    player.setProgression(state.jumpVelocity, state.gravity, state.maxJumps, state.rebirths);
-    player.character.setCosmetics(state.trailSlot, state.auraSlot);
-    player.character.setBoots(bestOwnedBoot(state.ownedBoots)?.slot ?? 0);
+    player.setProgression(state.jumpVelocity, state.gravity, state.rebirths, state.legReach);
+    player.character.setCosmetics(state.trailSlot);
+    player.character.setFood(bestOwnedFood(state.ownedFoods).slot);
+    player.character.setPets(state.pets);
     if (state.ready) {
       player.reconcile({
         x: state.x,
@@ -480,24 +477,23 @@ export class Game {
         velocityZ: state.velocityZ,
         grounded: state.grounded,
         jumpCount: state.jumpCount,
-        flipCount: state.flipCount,
-        jumpsUsed: state.jumpsUsed,
         lastInputSeq: state.lastInputSeq,
         jumpLatched: state.jumpLatched,
         coyote: state.coyote,
       });
     }
 
-    this.pops.observe(state.lifetimeEnergy);
+    this.pops.observe(state.lifetimeFood);
     this.wins.update(state.wins);
-    this.run.setInventory(state.ownedBoots, state.wins);
+    this.run.setInventory(state.ownedFoods, state.wins);
 
     if (this.lastLevel >= 0 && state.level > this.lastLevel) this.audio.play('level');
     if (this.lastRebirths >= 0 && state.rebirths > this.lastRebirths) this.audio.play('rebirth');
+    if (state.level !== this.lastLevel) this.nextLevel = nextStepLevel(state.level);
     this.lastLevel = state.level;
     this.lastRebirths = state.rebirths;
 
-    const purchases = `${state.ownedBoots}|${state.ownedTrails}|${state.ownedAuras}|${state.equipment.replace(/\*/g, '')}`;
+    const purchases = `${state.ownedFoods}|${state.ownedTrails}`;
     if (this.lastPurchases && purchases !== this.lastPurchases) this.audio.play('buy');
     this.lastPurchases = purchases;
 
@@ -505,11 +501,9 @@ export class Game {
     this.rebirthButton.setState(this.rebirthPanel.isEligible);
     this.trailPanel.setInventory(state.ownedTrails, state.trailSlot, state.wins);
     this.trailButton.setState(this.trailPanel.hasAffordable);
-    this.auraPanel.setInventory(state.ownedAuras, state.auraSlot, state.wins);
-    this.auraButton.setState(this.auraPanel.hasAffordable);
-    this.backpackPanel.setInventory(state.equipment, state.ownedBoots);
-    this.world.bootShop.setInventory(state.ownedBoots, state.wins);
-    this.world.training.setRebirths(state.rebirths);
+    this.petsPanel.setInventory(state.pets, state.ownedFoods);
+    this.world.foodShop.setInventory(state.ownedFoods, state.wins);
+    this.world.dining.setRebirths(state.rebirths);
   }
 
   private onWinAwarded(message: WinAwardedMessage): void {
@@ -517,6 +511,13 @@ export class Game {
     this.audio.play('win');
     this.banner.show(`+${formatNumber(message.wins)} WINS!`);
     this.trophyBurst.play();
+  }
+
+  private onPetHatched(message: PetHatchedMessage): void {
+    const pet = petById(message.pet);
+    if (!pet) return;
+    this.audio.play('hatch');
+    this.banner.show(`${pet.rarity.toUpperCase()} ${pet.name.toUpperCase()}!`);
   }
 
   private onStatusChange(status: ConnectionStatus): void {
@@ -535,7 +536,7 @@ export class Game {
     window.removeEventListener('mousedown', this.onGesture);
     window.removeEventListener('touchstart', this.onGesture);
     for (const panel of this.panels) panel.dispose();
-    for (const button of [this.rebirthButton, this.trailButton, this.auraButton, this.backpackButton, this.audioButton]) {
+    for (const button of [this.rebirthButton, this.trailButton, this.petsButton, this.audioButton]) {
       button.dispose();
     }
     this.hud.dispose();

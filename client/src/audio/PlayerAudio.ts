@@ -12,8 +12,14 @@ export interface PlayerAudioInput {
   readonly justLanded: boolean;
   /** 0..1 strength of this frame's landing, 0 for none or a tiny drop. */
   readonly landingImpact: number;
-  readonly onActiveTreadmill: boolean;
+  /** Seated at an unlocked dining table. */
+  readonly atActiveTable: boolean;
+  /** Eating this frame (walking with food, or seated). */
+  readonly isEating: boolean;
 }
+
+/** Seconds between chomps while eating. */
+const CHOMP_INTERVAL = 0.55;
 
 /**
  * Decides WHEN the local player makes a sound; `AudioManager` knows HOW.
@@ -22,12 +28,13 @@ export interface PlayerAudioInput {
 export class PlayerAudio {
   private stride = 0;
   private sinceStep = 0;
+  private sinceChomp = 0;
 
   constructor(private readonly audio: AudioManager) {}
 
-  /** Jumps are reported as events so a ground jump and an air flip sound different. */
-  jumped(air: boolean): void {
-    this.audio.play(air ? 'flip' : 'jump');
+  /** The (one) jump is reported as an event. */
+  jumped(): void {
+    this.audio.play('jump');
   }
 
   update(delta: number, player: PlayerAudioInput): void {
@@ -37,8 +44,14 @@ export class PlayerAudio {
       else this.audio.play('land', 0.3);
     }
 
+    this.sinceChomp += delta;
+    if (player.isEating && this.sinceChomp >= CHOMP_INTERVAL) {
+      this.sinceChomp = 0;
+      this.audio.play('eat', player.atActiveTable ? 0.8 : 0.5);
+    }
+
     this.sinceStep += delta;
-    const speed = player.onActiveTreadmill ? player.maxRunSpeed : player.horizontalSpeed;
+    const speed = player.atActiveTable ? 0 : player.horizontalSpeed;
     if (!player.isGrounded || speed < MIN_AUDIBLE_SPEED) {
       this.stride = 0;
       return;

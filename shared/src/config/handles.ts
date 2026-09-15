@@ -18,10 +18,10 @@ const FIRST = [
   'Sunny', 'Rapid', 'Mega', 'Cosmic', 'Frost', 'Ember', 'Jade', 'Vivid',
 ] as const;
 
-/** Noun half, drawn from the game's own moves and its verbs. */
+/** Noun half, drawn from the game's own things: legs, food, towers. */
 const SECOND = [
-  'Jumper', 'Spring', 'Leap', 'Star', 'Hopper', 'Flip', 'Bolt', 'Dash',
-  'Comet', 'Bounce', 'Rocket', 'Sprint', 'Climber', 'Racer', 'Vaulter', 'Spark',
+  'Giant', 'Stilts', 'Legs', 'Star', 'Tower', 'Muncher', 'Snack', 'Titan',
+  'Comet', 'Strider', 'Rocket', 'Donut', 'Climber', 'Burger', 'Beanstalk', 'Spark',
 ] as const;
 
 /**

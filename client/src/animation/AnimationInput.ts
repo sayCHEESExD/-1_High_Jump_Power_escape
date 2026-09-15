@@ -7,14 +7,18 @@
  */
 export interface AnimationInput {
   grounded: boolean;
-  /** Horizontal speed; on a treadmill, the speed they are running AT. */
+  /** Horizontal speed. */
   horizontalSpeed: number;
   verticalVelocity: number;
-  /** True on the frame a ground jump starts. */
+  /** True on the frame the jump starts. */
   jumpStarted: boolean;
-  /** True on the frame an AIR jump starts - which is a backflip. */
-  airJumped: boolean;
   landed: boolean;
+  /** Seated at an unlocked dining table: sit and eat. */
+  seated: boolean;
+  /** Eating from the held food (walking with it, or seated). */
+  eating: boolean;
+  /** Extra leg length in world units (0 with normal legs). Damps the stride and the flip. */
+  legExtra: number;
 }
 
 export const createAnimationInput = (): AnimationInput => ({
@@ -22,6 +26,8 @@ export const createAnimationInput = (): AnimationInput => ({
   horizontalSpeed: 0,
   verticalVelocity: 0,
   jumpStarted: false,
-  airJumped: false,
   landed: false,
+  seated: false,
+  eating: false,
+  legExtra: 0,
 });

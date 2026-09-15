@@ -1,4 +1,4 @@
-import { LEADERBOARD_SIZE, handleFor } from '@highjump/shared';
+import { LEADERBOARD_SIZE, handleFor, resolveHeight } from '@highjump/shared';
 import type { LeaderEntry, LeaderboardState } from '../rooms/state/GameState.js';
 import type { PlayerState } from '../rooms/state/PlayerState.js';
 import { profileStore } from './ProfileStore.js';
@@ -9,14 +9,15 @@ interface Candidate {
   readonly handle: string;
   readonly time: number;
   readonly wins: number;
-  readonly level: number;
+  readonly height: number;
   readonly rebirths: number;
 }
 
 /**
- * The Time, Wins and Level boards. Every figure is the server's: stored
- * profiles merged with live state (live wins where both exist). Rebuilt on a
- * slow timer - nobody reads a board twenty times a second.
+ * The Most Wins, Most Height and Most Time boards. Every figure is the
+ * server's: stored profiles merged with live state (live figures where both
+ * exist). Height is derived from the stored level, never stored itself.
+ * Rebuilt on a slow timer - nobody reads a board twenty times a second.
  */
 export class LeaderboardService {
   private timer = 0;
@@ -37,7 +38,7 @@ export class LeaderboardService {
         handle: handleFor(id),
         time: profile.playSeconds,
         wins: profile.wins,
-        level: profile.level,
+        height: resolveHeight(profile.level, profile.rebirths),
         rebirths: profile.rebirths,
       });
     }
@@ -48,16 +49,16 @@ export class LeaderboardService {
         handle: handleFor(id),
         time: player.playSeconds,
         wins: player.wins,
-        level: player.level,
+        height: player.height,
         rebirths: player.rebirths,
       });
     }
 
     const all = [...byId.values()];
-    fill(board.time, all, (c) => c.time, 60);
     fill(board.wins, all, (c) => c.wins, 1);
-    // Level ties break on rebirths, which is the harder-won figure.
-    fill(board.level, all, (c) => c.level, 1, (c) => c.rebirths);
+    // Height ties break on rebirths, which is the harder-won figure.
+    fill(board.height, all, (c) => c.height, 1, (c) => c.rebirths);
+    fill(board.time, all, (c) => c.time, 60);
   }
 }
 

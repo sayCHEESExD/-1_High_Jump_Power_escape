@@ -72,20 +72,21 @@ body.hj-touch-mode .hj-tile__key { display: none; }
 .hj-tile--locked { filter: saturate(.5) brightness(.85); }
 .hj-tile--rebirth { background: linear-gradient(160deg, #6de6ff, #2aa8f5 55%, #1670d0); }
 .hj-tile--trail { background: linear-gradient(160deg, #ff8a5c, #f0463a 55%, #c21f2c); }
-.hj-tile--aura { background: linear-gradient(160deg, #ffb3f2, #e86bff 55%, #a83bd6); }
-.hj-tile--backpack { background: linear-gradient(160deg, #ffd76b, #ffa32b 55%, #d97708); }
+.hj-tile--pets { background: linear-gradient(160deg, #ffd76b, #ffa32b 55%, #d97708); }
 .hj-tile--audio { background: linear-gradient(160deg, #9bf06a, #4fce2e 60%, #2f9a1f); }
 .hj-tile--off { filter: saturate(.25) brightness(.7); }
 .hj-tile svg.hj-icon { width: 62%; height: 62%; }
 
-/* ---- Bottom: height, jumps, level bar ---- */
+/* ---- Bottom: height, food per step, level bar ---- */
 .hj-hud {
   position: fixed; left: 50%; bottom: max(3vh, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
   width: min(760px, 70vw); pointer-events: none; user-select: none; z-index: 20;
 }
+.hj-hud__next { text-align: center; font-size: clamp(12px, 1.3vw, 17px); color: #ff9a3d; margin-bottom: 4px; white-space: nowrap; }
+.hj-hud__next--open { color: #7dff5c; }
 .hj-hud__row { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; margin: 0 14px 6px; }
 .hj-hud__height { font-size: clamp(18px, 2.4vw, 32px); white-space: nowrap; }
-.hj-hud__jumps { font-size: clamp(13px, 1.5vw, 20px); color: #ffe14d; white-space: nowrap; }
+.hj-hud__rate { font-size: clamp(13px, 1.5vw, 20px); color: #ffe14d; white-space: nowrap; }
 .hj-hud__rebirth {
   font-size: clamp(13px, 1.6vw, 22px); color: #3fe6ff; white-space: nowrap;
   text-shadow: 2px 0 0 #0b3550, -2px 0 0 #0b3550, 0 2px 0 #0b3550, 0 -2px 0 #0b3550;
@@ -135,7 +136,7 @@ body.hj-touch-mode .hj-keys { display: none; }
   100% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
 }
 
-/* ---- Energy popups (below the HUD in stacking order) ---- */
+/* ---- Food popups (below the HUD in stacking order) ---- */
 .hj-pops { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 19; }
 .hj-pop { --hj-pop-tilt: 0deg; --hj-pop-scale: 1; position: absolute; display: flex; align-items: center; gap: 4px; opacity: 0; }
 .hj-pop[hidden] { display: none; }
@@ -185,7 +186,7 @@ body.hj-touch-mode .hj-keys { display: none; }
 .hj-btn--red { background: linear-gradient(180deg, #ff7a7a, #f5363f 60%, #c41c25); }
 .hj-btn--blue { background: linear-gradient(180deg, #6de6ff, #2aa8f5 55%, #1670d0); }
 
-/* Cosmetic rows (trails / auras), as in the reference menus */
+/* Cosmetic rows (trails), as in the reference menus */
 .hj-cos {
   display: grid; grid-template-columns: 70px 1fr auto; align-items: center; gap: 12px; padding: 10px 12px;
   margin-bottom: 12px; border: 4px solid var(--hj-ink); border-radius: 16px; color: #fff;
@@ -195,23 +196,62 @@ body.hj-touch-mode .hj-keys { display: none; }
 .hj-cos__mult { font-size: clamp(14px, 1.5vw, 19px); color: #b8ff5c; display: flex; align-items: center; gap: 5px; }
 .hj-cos__mult img { height: 1.45em; width: auto; }
 
-/* Rebirth */
-.hj-rb { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center; margin: 6px 0 14px; }
-.hj-rb__head { text-align: center; font-size: clamp(16px, 1.8vw, 22px); }
-.hj-rb__card {
-  display: grid; place-items: center; padding: 12px 8px; border-radius: 14px; border: 4px solid var(--hj-ink);
-  background: linear-gradient(180deg, #6de6ff, #2aa8f5 55%, #1670d0); font-size: clamp(16px, 2vw, 26px); white-space: nowrap;
+/* Rebirth: purple header bar, Before/After height cards, level bar, Rebirth button */
+.hj-panel--rebirth .hj-panel__box {
+  width: min(560px, 94vw); border-radius: 6px; overflow: hidden;
+  background-color: rgba(70, 58, 96, .9);
+  background-image: linear-gradient(90deg, rgba(255,255,255,.05) 2px, transparent 2px), linear-gradient(0deg, rgba(255,255,255,.05) 2px, transparent 2px);
+  background-size: 26px 26px;
 }
-.hj-rb__arrow { font-size: 30px; color: #ffa32b; }
-.hj-rb__warn { text-align: center; color: #e21b2c; font-weight: 800; margin: 0 0 10px; }
-.hj-rb__bar { position: relative; height: 34px; border-radius: 10px; border: 3px solid var(--hj-ink); background: #8b939c; overflow: hidden; margin-bottom: 14px; }
-.hj-rb__fill { height: 100%; background: linear-gradient(180deg, #9bf06a, #4fce2e 60%, #37a81f); }
-.hj-rb__barlabel { position: absolute; inset: 0; display: grid; place-items: center; font-size: 16px; }
+.hj-panel--rebirth .hj-panel__head {
+  padding: 10px 76px 10px 14px; border-bottom: 4px solid var(--hj-ink);
+  background: linear-gradient(90deg, #9b2bff, #ff2bd6 55%, #b42bff); font-size: clamp(26px, 3.4vw, 36px);
+}
+.hj-panel--rebirth .hj-panel__close {
+  right: 10px; top: 8px; width: 50px; height: 50px; border: 4px solid var(--hj-ink); border-radius: 6px;
+  background: linear-gradient(180deg, #ff6a78, #d41c34); color: #fff; font-size: 28px;
+}
+.hj-panel--rebirth .hj-panel__body { padding: 12px 18px 20px; color: #fff; overflow-x: hidden; }
+.hj-rb__cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin-bottom: 8px; }
+.hj-rb__label { text-align: center; font-size: clamp(20px, 2.8vw, 30px); margin-bottom: 8px; }
+.hj-rb__card {
+  display: flex; align-items: center; justify-content: center; gap: 4px; padding: 12px 4px; min-width: 0;
+  border: 4px solid var(--hj-ink); border-radius: 4px; white-space: nowrap; overflow: hidden;
+  background: linear-gradient(135deg, #fff200, #ffb400 50%, #ffe000); font-size: clamp(16px, 2.4vw, 28px);
+}
+.hj-rb__arrow { width: 1.05em; height: 1.05em; flex: none; }
+.hj-rb__warn { text-align: center; margin: 12px 0 8px; font-size: clamp(16px, 2.2vw, 24px); }
+.hj-rb__warn.hj-outline { color: #ff3b3b; }
+.hj-rb__bar {
+  position: relative; height: clamp(46px, 7vw, 62px); border: 4px solid var(--hj-ink); border-radius: 4px;
+  background: #1b3552; overflow: hidden; margin-bottom: 16px;
+}
+.hj-rb__fill { height: 100%; background: linear-gradient(90deg, #1f8cff, #1fd3ff 55%, #2ab6ff); }
+.hj-rb__barlabel { position: absolute; inset: 0; display: grid; place-items: center; font-size: clamp(22px, 3.2vw, 34px); }
 .hj-rb__actions { display: flex; justify-content: center; }
+.hj-rb__actions .hj-rb__button { width: min(100%, 320px); }
+.hj-rb__button {
+  border: 4px solid var(--hj-ink); border-radius: 4px; padding: 14px 8px; cursor: pointer; white-space: nowrap;
+  box-shadow: inset 0 -5px 0 rgba(0,0,0,.18);
+}
+.hj-rb__go { background: linear-gradient(135deg, #3dff3d, #b4ff00 50%, #2fd12f); font-size: clamp(24px, 3.6vw, 40px); }
+.hj-rb__button:disabled { filter: saturate(.35) brightness(.8); cursor: not-allowed; }
+.hj-rb__button.hj-outline { color: #fff; }
+body.hj-no-jump .hj-touch__jump { display: none; }
 
-/* Item shop cards */
-.hj-shop__top { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 12px; font-size: clamp(18px, 2.4vw, 30px); }
-.hj-shop__cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+/* Egg shop */
+.hj-egg {
+  display: grid; grid-template-columns: 74px 1fr auto; align-items: center; gap: 12px; padding: 10px 12px; margin-bottom: 12px;
+  border: 4px solid var(--hj-ink); border-radius: 16px; color: #fff;
+}
+.hj-egg__shell { width: 58px; height: 74px; border-radius: 50% 50% 46% 46% / 60% 60% 40% 40%; border: 3px solid rgba(0,0,0,.35); box-shadow: inset 8px 10px 0 rgba(255,255,255,.35); }
+.hj-egg__name { font-size: clamp(18px, 2.2vw, 26px); }
+.hj-egg__pets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 6px; }
+.hj-egg__pet { border: 2px solid var(--hj-ink); border-radius: 10px; padding: 3px 4px; text-align: center; font-size: 11px; line-height: 1.25; background: rgba(0,0,0,.28); }
+.hj-egg__pet b { display: block; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hj-egg__pet i { font-style: normal; color: #fff36b; }
+.hj-shop__note { text-align: center; margin-top: 10px; font-weight: 700; color: #43506b; }
+.hj-shop__summary { text-align: center; margin: 0 0 10px; font-weight: 800; color: #43506b; }
 .hj-card {
   display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 6px 10px;
   border: 3px solid var(--hj-ink); border-radius: 16px; color: #fff; text-align: center;
@@ -220,7 +260,8 @@ body.hj-touch-mode .hj-keys { display: none; }
 .hj-card__gem { width: 64px; height: 64px; transform: rotate(45deg); border: 4px solid rgba(0,0,0,.35); border-radius: 12px; margin: 10px 0; box-shadow: inset 8px 8px 0 rgba(255,255,255,.35); }
 .hj-card__name { font-size: clamp(14px, 1.7vw, 20px); }
 .hj-card__bonus { font-size: clamp(12px, 1.4vw, 17px); color: #fff36b; }
-.hj-shop__note { text-align: center; margin-top: 10px; font-weight: 700; color: #43506b; }
+.hj-card__pet { width: 60px; height: 60px; border-radius: 50%; border: 4px solid rgba(0,0,0,.35); margin: 8px 0 4px; box-shadow: inset 8px 8px 0 rgba(255,255,255,.35); }
+.hj-card__rarity--small { font-size: 12px; opacity: .95; }
 
 /* Backpack */
 .hj-bp__tabs { display: flex; gap: 8px; justify-content: center; margin-bottom: 10px; }
@@ -295,7 +336,7 @@ body.hj-touch-mode .hj-account__name { max-width: 30vw; }
   .hj-rail { top: max(8px, env(safe-area-inset-top, 0px)); transform: none; grid-template-columns: repeat(5, var(--hj-rail)); gap: 10px; }
   body.hj-touch-mode .hj-hud { bottom: 8px; width: 46vw; }
   .hj-panel__box { max-height: 94vh; }
-  .hj-card__gem { width: 40px; height: 40px; margin: 4px 0; }
+  .hj-card__gem, .hj-card__pet { width: 40px; height: 40px; margin: 4px 0; }
 }
 @media (max-width: 560px) {
   :root { --hj-rail: 50px; }
@@ -305,7 +346,10 @@ body.hj-touch-mode .hj-account__name { max-width: 30vw; }
   body.hj-touch-mode .hj-hud { width: 72vw; bottom: calc(2vh + 118px); }
   .hj-hud__height { font-size: 16px; }
   .hj-hud__level, .hj-hud__amount { font-size: 13px; }
-  .hj-shop__cards { grid-template-columns: 1fr; }
+  .hj-egg { grid-template-columns: 48px 1fr; }
+  .hj-egg__shell { width: 40px; height: 52px; }
+  .hj-egg > :last-child { grid-column: 1 / -1; }
+  .hj-egg__pets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .hj-cos { grid-template-columns: 48px 1fr; }
   .hj-cos__swatch { width: 44px; height: 44px; }
   .hj-cos > :last-child { grid-column: 1 / -1; }
@@ -323,6 +367,20 @@ export const iconUrl = (file: string): string => `/ui/${file}`;
 const icon = (file: string): string =>
   `<img class="hj-icon" src="${iconUrl(file)}" alt="" draggable="false">`;
 
+/**
+ * The food icon: a cartoon apple, drawn as SVG so it costs a few hundred bytes
+ * instead of an image file. Also used as an image URL (popups, world signs).
+ */
+const FOOD_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
+  '<path d="M32 19c-6-6-23-5-25 12-2 16 10 29 18 29 3 0 4-2 7-2s4 2 7 2c8 0 20-13 18-29-2-17-19-18-25-12z" fill="#ff4d4d" stroke="#12181f" stroke-width="4" stroke-linejoin="round"/>' +
+  '<path d="M32 19c0-6 2-10 6-13" stroke="#12181f" stroke-width="5" fill="none" stroke-linecap="round"/>' +
+  '<path d="M32 19c0-6 2-10 6-13" stroke="#8a5a2b" stroke-width="2.5" fill="none" stroke-linecap="round"/>' +
+  '<path d="M37 13c6-7 15-6 17-3-4 6-12 7-17 3z" fill="#5cd65c" stroke="#12181f" stroke-width="3" stroke-linejoin="round"/>' +
+  '<ellipse cx="21" cy="31" rx="4" ry="7.5" fill="#fff" opacity=".45"/></svg>';
+
+export const FOOD_ICON_URL = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(FOOD_SVG)}`;
+
 const SPEAKER =
   '<svg class="hj-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" stroke="#12181f" stroke-width="1.2" d="M4 9h3.2L12 4.6v14.8L7.2 15H4z"/>' +
   '<path fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" d="M15.6 8.6a4.6 4.6 0 0 1 0 6.8M18.4 5.8a8.4 8.4 0 0 1 0 12.4"/></svg>';
@@ -331,11 +389,8 @@ export const ICONS = {
   trophy: icon('trophy.png'),
   rebirth: icon('rebirth.png'),
   trail: icon('trail.png'),
-  aura: icon('aura.png'),
-  energy: icon('energy.png'),
-  shoe: icon('shoe.png'),
-  backpack: icon('inventory.png'),
+  food: `<img class="hj-icon" src="${FOOD_ICON_URL}" alt="" draggable="false">`,
+  pets: icon('inventory.png'),
   shop: icon('shop.png'),
-  equipment: icon('equipment.png'),
   audio: SPEAKER,
 } as const;

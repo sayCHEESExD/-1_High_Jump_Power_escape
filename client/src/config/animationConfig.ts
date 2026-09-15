@@ -3,13 +3,10 @@ import type { PoseDefinition } from '../animation/PoseBuffer.js';
 const deg = (degrees: number): number => (degrees * Math.PI) / 180;
 
 /**
- * Procedural animation tuning, ported from the backflip game and re-tuned for
- * this game's run speed. All rotations are in character space (see
- * `PlayerRig`): +X pitch swings a limb backward, +Y yaws, +Z rolls.
+ * Procedural animation tuning, re-tuned for this game's run speed. All
+ * rotations are in character space (see `PlayerRig`): +X pitch swings a limb
+ * backward, +Y yaws, +Z rolls.
  */
-
-/** Height of the backflip pivot above the feet (hip height). */
-export const FLIP_PIVOT_HEIGHT = 1.6;
 
 /** Height of the (idle) tip pivot above the feet. */
 export const TIP_PIVOT_HEIGHT = 1.1;
@@ -109,37 +106,59 @@ export const LANDING = {
   bobY: -0.22,
 } as const;
 
-export const BACKFLIP_ANIM = {
-  /** Seconds per full rotation. Shorter than the shortest air jump's airtime. */
-  rotationDuration: 0.42,
-  abortDuration: 0.14,
-  tuckPose: {
-    Spine1: { x: deg(34) },
-    Spine2: { x: deg(20) },
-    Neck1: { x: deg(-16) },
-    LegL1: { x: deg(-84) },
-    LegR1: { x: deg(-84) },
-    LegL2: { x: deg(112) },
-    LegR2: { x: deg(112) },
-    ArmL1: { x: deg(46), z: deg(-26) },
-    ArmR1: { x: deg(46), z: deg(26) },
-    ArmL2: { x: deg(78) },
-    ArmR2: { x: deg(78) },
+/** Sitting on a dining chair: thighs forward, knees bent, body lowered onto the seat. */
+export const SIT = {
+  pose: {
+    Spine1: { x: deg(5) },
+    LegL1: { x: deg(-86) },
+    LegR1: { x: deg(-86) },
+    LegL2: { x: deg(90) },
+    LegR2: { x: deg(90) },
+    ArmL1: { x: deg(-38), z: deg(-6) },
+    ArmL2: { x: deg(34) },
+    ArmR1: { x: deg(-20), z: deg(6) },
+    ArmR2: { x: deg(20) },
   } satisfies PoseDefinition,
-  tuckAsymmetry: deg(6),
+  /** How far the body drops to sit, in world units. */
+  bobY: -0.82,
+  /** Most movement speed that still counts as sitting. */
+  maxSpeed: 1.5,
+} as const;
+
+/**
+ * Eating: the right hand brings the food to the mouth once per `period`, with
+ * a small nod. Layered over idle, walking and sitting.
+ */
+export const EAT = {
+  period: 0.9,
+  /** Fraction of the period spent raising and lowering the hand. */
+  raise: 0.65,
+  shoulder: deg(-78),
+  shoulderRoll: deg(-22),
+  elbow: deg(118),
+  nod: deg(9),
+} as const;
+
+/**
+ * Tall legs: the long legs swing through a much smaller angle (a 900-unit leg
+ * swinging like a normal one would sweep the whole staircase).
+ */
+export const TALL_ANIM = {
+  /** Leg swing is divided by (1 + extra length * this). */
+  dampPerUnit: 0.08,
 } as const;
 
 export const TRANSITIONS = {
+  toSit: 0.22,
   toLocomotion: 0.16,
   toJumpStart: 0.05,
   toAirborne: 0.12,
   toLanding: 0.05,
-  toBackflip: 0.06,
 } as const;
 
 /**
- * Playback rate of the jump animations - the crouch, the airborne poses, the
- * backflip and the landing - relative to their authored speed. 0.5 plays them
+ * Playback rate of the jump animations - the crouch, the airborne poses and
+ * the landing - relative to their authored speed. 0.5 plays them
  * at half speed. Purely visual: jump physics are untouched.
  */
 export const JUMP_ANIMATION = {

@@ -17,19 +17,32 @@ const MAX_VOICES = 12;
 /** Extra gain on the landing impact above the effects bus, so it cuts through. */
 const IMPACT_GAIN = 2.2;
 
-export type SoundName = 'jump' | 'flip' | 'land' | 'impact' | 'step' | 'win' | 'level' | 'rebirth' | 'buy' | 'ui' | 'deny';
+export type SoundName =
+  | 'jump'
+  | 'land'
+  | 'impact'
+  | 'step'
+  | 'eat'
+  | 'win'
+  | 'level'
+  | 'rebirth'
+  | 'buy'
+  | 'hatch'
+  | 'ui'
+  | 'deny';
 
 /** Seconds a sound refuses to retrigger, so nothing can machine-gun. */
 const COOLDOWNS: Readonly<Record<SoundName, number>> = {
   jump: 0.08,
-  flip: 0.08,
   land: 0.12,
   impact: 0.12,
   step: 0.05,
+  eat: 0.3,
   win: 0.4,
   level: 0.3,
   rebirth: 0.8,
   buy: 0.2,
+  hatch: 0.6,
   ui: 0.05,
   deny: 0.25,
 };
@@ -158,10 +171,6 @@ export class AudioManager {
       case 'jump':
         if (!this.playBuffer(this.jumpBuffer, now, 0.9, 1)) this.blip(now, 'square', 320, 640, 0.16, 0.5);
         break;
-      case 'flip':
-        // The same file, pitched up: an air jump should sound like a jump, lighter.
-        if (!this.playBuffer(this.jumpBuffer, now, 0.8, 1.35)) this.blip(now, 'triangle', 500, 1100, 0.18, 0.45);
-        break;
       case 'land':
         this.thud(now, 0.3 + level * 0.3);
         break;
@@ -171,6 +180,14 @@ export class AudioManager {
         break;
       case 'step':
         this.thud(now, 0.07 + level * 0.1, 130);
+        break;
+      case 'eat':
+        // A chomp: two quick crunchy blips, synthesised.
+        this.blip(now, 'square', 260, 140, 0.05, 0.12 * level + 0.05);
+        this.blip(now + 0.08, 'square', 220, 110, 0.05, 0.1 * level + 0.04);
+        break;
+      case 'hatch':
+        this.arpeggio(now, [0, 3, 7, 12, 15, 19], 0.06, 'triangle', 0.4);
         break;
       case 'win':
         this.arpeggio(now, [0, 4, 7, 12, 16], 0.08, 'triangle', 0.5);

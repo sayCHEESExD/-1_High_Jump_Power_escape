@@ -3,8 +3,8 @@
  * simulates with them, so there is exactly one copy, here.
  *
  * Horizontal movement is deliberately NOT a progression axis in this game:
- * progression buys JUMP HEIGHT and JUMP COUNT. A staircase obby where the run
- * speed also ran away would turn every landing into an overshoot.
+ * progression buys HEIGHT and LEG REACH. A staircase where the run speed also
+ * ran away would turn every tall step into an overshoot.
  */
 export interface MovementConfig {
   /** Movement speed, world units per second. There is no sprint. */
@@ -18,7 +18,7 @@ export interface MovementConfig {
   /** Largest distance one substep may integrate. See `stepPlayer`. */
   readonly maxSubstepDistance: number;
   readonly maxSubsteps: number;
-  /** Height the player steps up without jumping. Pads and decks sit under it. */
+  /** Height a normal-legged player steps up without jumping. Pads sit under it. Past the tall line the leg reach replaces it. */
   readonly stepHeight: number;
   /** Seconds after leaving a ledge during which the ground jump still counts. */
   readonly coyoteTime: number;

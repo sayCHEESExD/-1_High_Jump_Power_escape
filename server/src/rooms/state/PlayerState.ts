@@ -31,44 +31,40 @@ export class PlayerState extends Schema {
   /** Latched simulation state, so client replay resumes exactly where the server stopped. */
   @type('boolean') jumpLatched = false;
   @type('float32') coyote = 0;
-  @type('uint8') jumpsUsed = 0;
 
-  /** Monotonic counters, so remote clients derive one-shot animations. */
+  /** Monotonic jump counter, so remote clients derive the one-shot jump animation. */
   @type('uint32') jumpCount = 0;
-  @type('uint32') flipCount = 0;
 
-  /** Belt underfoot, derived by the simulation from the server's own position. */
-  @type('uint8') treadmill = 0;
+  /** Dining table the player is seated at, derived by the simulation from the server's own position. */
+  @type('uint8') dining = 0;
 
   // ---- progression (server-authoritative)
   @type('uint32') level = 1;
-  /** Energy banked toward the next level. */
-  @type('float64') energy = 0;
-  /** Lifetime energy, for the gain popups only. Never spent. */
-  @type('float64') lifetimeEnergy = 0;
+  /** Food banked toward the next level. */
+  @type('float64') food = 0;
+  /** Lifetime food, for the gain popups only. Never spent. */
+  @type('float64') lifetimeFood = 0;
   @type('uint32') rebirths = 0;
   @type('float64') wins = 0;
   /** Seconds played, for the Time board. */
   @type('float64') playSeconds = 0;
 
-  // ---- derived from progression by EnergyService
-  @type('float32') height = 8;
+  // ---- derived from progression by FoodService
+  /** The height figure (level 73 = 3.6K). */
+  @type('float64') height = 10;
+  /** Leg reach in world units: the step height past the tall line, and how long the legs are drawn. */
+  @type('float32') legReach = 8;
   @type('float32') jumpVelocity = 40;
   @type('float32') gravity = 100;
-  @type('uint8') maxJumps = 1;
-  @type('float32') energyPerStep = 1;
+  @type('float64') foodPerStep = 1;
 
   // ---- inventories
-  @type('uint16') ownedBoots = 0;
+  /** Owned foods as a bit mask (Lettuce is always owned). */
+  @type('uint16') ownedFoods = 1;
   @type('uint16') ownedTrails = 0;
   @type('uint8') trailSlot = 0;
-  @type('uint16') ownedAuras = 0;
-  @type('uint8') auraSlot = 0;
-  /** Backpack, encoded by `encodeEquipment`. */
-  @type('string') equipment = '';
-  /** Which restock the purchase mask below refers to. */
-  @type('uint32') shopBoughtSlot = 0;
-  @type('uint8') shopBoughtMask = 0;
+  /** Pet inventory, encoded by `encodePets`. */
+  @type('string') pets = '';
 
   /** True once the server has simulated at least one input for this player. */
   @type('boolean') ready = false;

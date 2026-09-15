@@ -66,16 +66,14 @@ export class JsonFilePersistence implements PersistenceAdapter {
         if (!value || typeof value !== 'object') continue;
         profiles.set(id, {
           level: Math.max(1, numeric(value.level)),
-          energy: numeric(value.energy),
+          food: numeric(value.food),
           rebirths: numeric(value.rebirths),
           wins: numeric(value.wins),
           playSeconds: numeric(value.playSeconds),
-          ownedBoots: numeric(value.ownedBoots),
+          ownedFoods: numeric(value.ownedFoods),
           ownedTrails: numeric(value.ownedTrails),
           trailSlot: numeric(value.trailSlot),
-          ownedAuras: numeric(value.ownedAuras),
-          auraSlot: numeric(value.auraSlot),
-          equipment: typeof value.equipment === 'string' ? value.equipment.slice(0, 256) : '',
+          pets: typeof value.pets === 'string' ? value.pets.slice(0, 2048) : '',
           updatedAt: numeric(value.updatedAt),
         });
       }

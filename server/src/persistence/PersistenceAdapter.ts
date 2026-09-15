@@ -1,22 +1,20 @@
 /**
  * Everything worth keeping about a player between sessions.
  *
- * The DERIVING facts only: height, jump physics, jump count and energy per
- * step are recomputed from these on load through the same formulas a live
- * session uses, so a tuning change reaches returning players.
+ * The DERIVING facts only: height, leg reach, jump physics and food per
+ * step are recomputed from these on load through the same formulas a
+ * live session uses, so a tuning change reaches returning players.
  */
 export interface StoredProfile {
   level: number;
-  energy: number;
+  food: number;
   rebirths: number;
   wins: number;
   playSeconds: number;
-  ownedBoots: number;
+  ownedFoods: number;
   ownedTrails: number;
   trailSlot: number;
-  ownedAuras: number;
-  auraSlot: number;
-  equipment: string;
+  pets: string;
   updatedAt: number;
 }
 

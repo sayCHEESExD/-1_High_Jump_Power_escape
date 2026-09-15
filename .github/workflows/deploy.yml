@@ -1,4 +1,4 @@
-# Deploy +1 High Jump Power Escape to Bloxity Hosting.
+# Deploy +1 Tall Escape to Bloxity Hosting.
 #
 #   dev  branch -> Bloxity "dev"  channel
 #   main branch -> Bloxity "prod" channel
@@ -32,13 +32,13 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  BLOXITY_GAME_ID: high-jump-power-escape
+  BLOXITY_GAME_ID: tall-escape
   # Legion fills a pod to seatCap before starting another, so this must equal the
   # Colyseus room's maxClients (MAX_PLAYERS_PER_ROOM = 15).
   SEAT_CAP: '15'
   MAX_REPLICAS: '5'
-  LEGION_DEPLOY_URL: https://legion.bloxity.io/v1/apps/high-jump-power-escape/deploy
-  FRONTEND_UPLOAD_URL: https://api.bloxity.io/v1/hosting/games/high-jump-power-escape/frontend
+  LEGION_DEPLOY_URL: https://legion.bloxity.io/v1/apps/tall-escape/deploy
+  FRONTEND_UPLOAD_URL: https://api.bloxity.io/v1/hosting/games/tall-escape/frontend
 
 jobs:
   setup:

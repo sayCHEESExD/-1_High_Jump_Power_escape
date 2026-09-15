@@ -21,26 +21,32 @@ export interface RespawnMessage {
   reason: RespawnReason;
 }
 
-/** "I am standing on this biome's win pad." A request, never a grant. */
+/** "I am standing on this step's win pad." A request, never a grant. */
 export interface ClaimWinMessage {
-  biome: number;
+  step: number;
 }
 
 /** A win landed. Presentation only. */
 export interface WinAwardedMessage {
-  biome: number;
+  step: number;
   wins: number;
   total: number;
 }
 
-/** A slot-addressed request: boots, trails, auras. */
+/** A slot-addressed request: foods, trails, eggs. */
 export interface SlotMessage {
   slot: number;
 }
 
-/** An index-addressed request: shop stock or backpack entry. */
+/** An index-addressed request: a pet in the inventory. */
 export interface IndexMessage {
   index: number;
+}
+
+/** An egg hatched. Presentation only: the pet is already in replicated state. */
+export interface PetHatchedMessage {
+  egg: number;
+  pet: string;
 }
 
 /**

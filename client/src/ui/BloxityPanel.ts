@@ -23,8 +23,8 @@ class ContentPanel extends Panel {
  * which is the only thing that grants them.
  */
 const BUX_PRODUCTS: readonly { sku: string; name: string; blurb: string }[] = [
-  { sku: 'wins_small', name: 'Pouch of Wins', blurb: 'A head start on spring boots and trails.' },
-  { sku: 'wins_large', name: 'Chest of Wins', blurb: 'Enough for a serious boot or aura.' },
+  { sku: 'wins_small', name: 'Pouch of Wins', blurb: 'A head start on better food and trails.' },
+  { sku: 'wins_large', name: 'Chest of Wins', blurb: 'Enough for a serious egg or trail.' },
 ];
 
 /** The proportions exposed as sliders. The customizer covers the rest. */

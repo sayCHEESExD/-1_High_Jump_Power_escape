@@ -14,7 +14,7 @@ const SCOPE = 'bloxity/body';
  * The body is Bloxity's `player.glb`, and body PARTS are geometry swapped onto
  * its skeleton by mesh name - the reference page's approach, because a part is
  * a skinned mesh authored against that one shared rig. The GLB's rig carries
- * the same twelve bone names `PlayerRig` binds, so the run, jump and backflip
+ * the same twelve bone names `PlayerRig` binds, so the run, sit and jump
  * drive a Bloxity body without knowing it is one. Nothing in this file animates.
  *
  * Everything is cached by URL, so rebuilding for a hat-and-skin change costs no

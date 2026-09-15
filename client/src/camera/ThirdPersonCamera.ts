@@ -35,6 +35,13 @@ const ZOOM_EASE = 12;
 /** How fast that extra distance is given up. Higher is snappier. */
 const RESPAWN_ZOOM_RATE = 6.5;
 
+/**
+ * How much further the far plane reaches per world unit of extra leg length.
+ * The ONLY thing the legs change about the camera: the body rides high above
+ * the course, and scenery below it would otherwise drop out of view.
+ */
+const TALL_FAR_PER_UNIT = 5;
+
 const FORWARD = new Vector3();
 const LOOK_TARGET = new Vector3();
 const OFFSET = new Vector3();
@@ -75,6 +82,16 @@ export class ThirdPersonCamera {
 
   /** Eased 0..1 speed factor driving the dynamic distance and FOV. */
   private rush = 0;
+
+  /** The subject's extra leg length, in world units. */
+  private legExtra = 0;
+
+  /**
+   * Half-width of a walled corridor the camera must stay inside, or 0 for none.
+   * On the staircase the camera orbits far out with the long legs, and would
+   * otherwise swing through the side walls.
+   */
+  private corridorHalfWidth = 0;
 
   private aspect = 1;
 
@@ -152,6 +169,16 @@ export class ThirdPersonCamera {
     this.zoomOffset = zoomIn ? RESPAWN_ZOOM_DISTANCE : 0;
   }
 
+  /** How much longer than normal the followed player's legs are right now (already smoothed). */
+  setLegExtra(extra: number): void {
+    this.legExtra = Number.isFinite(extra) ? Math.max(0, extra) : 0;
+  }
+
+  /** Keep the camera within `halfWidth` of x = 0 (the staircase walkway), or 0 to lift the limit. */
+  setCorridor(halfWidth: number): void {
+    this.corridorHalfWidth = Number.isFinite(halfWidth) ? Math.max(0, halfWidth) : 0;
+  }
+
   /** Aim the orbit. Called every frame from the look source. */
   setOrbit(yaw: number, pitch: number): void {
     this.orbitYaw = yaw;
@@ -187,8 +214,16 @@ export class ThirdPersonCamera {
     this.rush += (targetRush - this.rush) * (1 - Math.exp(-CAMERA.speedEase * delta));
 
     this.zoom += (this.zoomTarget - this.zoom) * (1 - Math.exp(-ZOOM_EASE * delta));
-    const distance =
-      (CAMERA.distance + CAMERA.speedDistance * this.rush) * this.zoom + this.zoomOffset;
+    // The camera orbits the BODY, which the legs lift `legExtra` above the
+    // feet. The legs move the pivot up with the body and nothing else: the
+    // distance, the zoom and the framing are exactly those of a normal player.
+    const bodyY = this.legExtra;
+    const distance = (CAMERA.distance + CAMERA.speedDistance * this.rush) * this.zoom + this.zoomOffset;
+    const far = CAMERA.far + bodyY * TALL_FAR_PER_UNIT;
+    if (Math.abs(this.camera.far - far) > 1) {
+      this.camera.far = far;
+      this.camera.updateProjectionMatrix();
+    }
     const punch = this.shakeTime > 0 ? SHAKE_FOV * this.shakeStrength * (this.shakeTime / SHAKE_DURATION) ** 2 : 0;
     const fov = CAMERA.fov + CAMERA.speedFov * this.rush + punch;
     if (Math.abs(this.camera.fov - fov) > 0.01) {
@@ -213,9 +248,12 @@ export class ThirdPersonCamera {
     this.camera.position
       .copy(this.followed)
       .addScaledVector(FORWARD, -distance)
-      .add(OFFSET.set(0, CAMERA.height + sinPitch * distance, 0));
+      .add(OFFSET.set(0, bodyY + CAMERA.height + sinPitch * distance, 0));
+    if (this.corridorHalfWidth > 0) {
+      this.camera.position.x = clamp(this.camera.position.x, -this.corridorHalfWidth, this.corridorHalfWidth);
+    }
 
-    LOOK_TARGET.copy(this.followed).add(OFFSET.set(0, CAMERA.lookAtHeight, 0));
+    LOOK_TARGET.copy(this.followed).add(OFFSET.set(0, bodyY + CAMERA.lookAtHeight, 0));
     this.camera.lookAt(LOOK_TARGET);
 
     // Landing shake, applied after the camera is aimed:

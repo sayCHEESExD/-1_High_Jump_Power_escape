@@ -27,13 +27,13 @@ export interface LookSink {
 }
 
 /**
- * Touch controls: a virtual analog stick, a jump/backflip button, and
- * drag-to-look.
+ * Touch controls: a virtual analog stick, the jump button (shown only in the
+ * spawn area, where jumping exists), and drag-to-look.
  *
  * This is a SOURCE, not a second movement system. It writes the same
  * `moveX`/`moveZ`/`jump` fields the keyboard writes, through the same
  * `InputManager`, into the same `MoveMessage` - so prediction, reconciliation,
- * treadmill entry and exit, backflip validation and every server check behave
+ * dining seats, tall-line crossings, jump validation and every server check behave
  * identically to desktop. Nothing here knows what a player is.
  *
  * Pointer routing is by POINTER ID, so one finger can never drive two systems:
@@ -74,7 +74,7 @@ export class TouchControls {
    * A tap can begin AND end inside one render frame, which would otherwise be
    * sampled as "never pressed". Latching it guarantees one frame of
    * `jump = true` followed by a frame of false - exactly the rising edge the
-   * shared simulation's `jumpLatched` looks for, so rapid taps chain flips.
+   * shared simulation's `jumpLatched` looks for.
    */
   private jumpPulse = false;
 
@@ -100,7 +100,7 @@ export class TouchControls {
     this.jumpButton = document.createElement('button');
     this.jumpButton.className = 'hj-touch__jump';
     this.jumpButton.type = 'button';
-    this.jumpButton.setAttribute('aria-label', 'Jump and backflip');
+    this.jumpButton.setAttribute('aria-label', 'Jump');
     this.jumpButton.textContent = '⤴';
 
     this.root.append(this.stick, this.jumpButton);

@@ -33,6 +33,18 @@ export class SceneManager {
     this.followShadow(0, 0, 0);
   }
 
+  /**
+   * Push the fog out while the followed player's legs are long: the camera
+   * pulls back with the legs, and fog tuned for a normal-sized player would
+   * swallow them.
+   */
+  setLegExtra(extra: number): void {
+    const fog = this.scene.fog as Fog;
+    const tall = Number.isFinite(extra) ? Math.max(0, extra) : 0;
+    fog.near = WORLD_FOG.near + tall * 1.5;
+    fog.far = WORLD_FOG.far + tall * 3;
+  }
+
   followShadow(x: number, y: number, z: number): void {
     this.sun.target.position.set(x, y, z);
     this.sun.position.set(x + 40, y + 90, z - 30);

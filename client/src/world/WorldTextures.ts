@@ -59,26 +59,30 @@ export class WorldTextures {
     });
   }
 
-  /** Treadmill belt: dark rubber with chevrons pointing along V (the belt's length). */
-  belt(base: string, mark: string): Texture {
-    return this.cached(`belt:${base}:${mark}`, () => {
+  /**
+   * A stone face: a flat colour with a scatter of darker square blocks, the
+   * clean staircase's look. Deterministic, so every client draws the same.
+   */
+  speckle(colour: string, mark: string): Texture {
+    return this.cached(`speckle:${colour}:${mark}`, () => {
       const size = 64;
       const ctx = context(size);
-      ctx.fillStyle = base;
+      ctx.fillStyle = colour;
       ctx.fillRect(0, 0, size, size);
+      let seed = 41;
+      const next = (): number => {
+        seed = (seed * 16807) % 2147483647;
+        return seed / 2147483647;
+      };
       ctx.fillStyle = mark;
-      for (let i = 0; i < 2; i += 1) {
-        const at = i * 32;
-        ctx.beginPath();
-        ctx.moveTo(4, at + 22);
-        ctx.lineTo(size / 2, at + 4);
-        ctx.lineTo(size - 4, at + 22);
-        ctx.lineTo(size - 4, at + 28);
-        ctx.lineTo(size / 2, at + 10);
-        ctx.lineTo(4, at + 28);
-        ctx.closePath();
-        ctx.fill();
+      for (let i = 0; i < 9; i += 1) {
+        const w = 5 + next() * 9;
+        ctx.globalAlpha = 0.35 + next() * 0.4;
+        ctx.fillRect(next() * (size - w), next() * (size - w), w, w);
       }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(0, 0, size, 2);
       return ctx.canvas;
     });
   }

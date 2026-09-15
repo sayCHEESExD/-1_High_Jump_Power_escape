@@ -35,8 +35,9 @@ interface Sim {
  * Server-authoritative movement.
  *
  * The client sends INPUT only; this runs the shared simulation and the result
- * becomes the player's transform. Jump height, gravity and the jump count come
- * from the player's replicated progression, which only the server writes.
+ * becomes the player's transform. Gravity, jump speed and the leg reach (where
+ * the body meets the stair faces) come from the player's replicated
+ * progression, which only the server writes.
  */
 export class MovementService {
   private readonly sims = new Map<string, Sim>();
@@ -95,7 +96,11 @@ export class MovementService {
     stepPlayer(
       sim.motion,
       sanitiseInput(message),
-      { jumpVelocity: player.jumpVelocity, gravity: player.gravity, maxJumps: player.maxJumps },
+      {
+        jumpVelocity: player.jumpVelocity,
+        gravity: player.gravity,
+        legReach: player.legReach,
+      },
       step,
       this.collision,
       sim.events,
@@ -118,11 +123,9 @@ export class MovementService {
     player.speed = horizontalSpeed(m);
     player.grounded = m.grounded;
     player.jumpCount = m.jumpCount;
-    player.flipCount = m.flipCount;
-    player.jumpsUsed = m.jumpsUsed;
     player.jumpLatched = m.jumpLatched;
     player.coyote = m.coyote;
-    player.treadmill = m.treadmill;
+    player.dining = m.dining;
     player.lastInputSeq = sim.lastSeq;
     player.ready = true;
   }

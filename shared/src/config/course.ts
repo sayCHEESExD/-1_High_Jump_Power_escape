@@ -1,117 +1,146 @@
-import { BOOT_TIERS } from './boots.js';
-import { TRAINING } from './treadmills.js';
+import { BODY_RADIUS, WALL_CLEARANCE } from '../constants/world.js';
+import { DINING, CHAIR_OFFSETS } from './dining.js';
+import { FOOD_TIERS } from './foods.js';
+import { legReach } from './progression.js';
 import type { Aabb } from '../types/math.js';
 
 /**
- * The world: a walled hub, then a staircase of 14 biomes climbing into the sky.
+ * The world: a walled hub, then one clean staircase climbing along +Z.
  *
- * PURE DATA, generated from the `BIOMES` table. The renderer draws exactly
- * `COURSE_SOLIDS` and the collision model collides against exactly the same
- * array, so a platform the client draws but the server does not know about is
- * structurally impossible.
+ * PURE DATA. The renderer draws exactly what is here and the collision model
+ * collides against exactly `COURSE_SOLIDS`, so a platform the client draws but
+ * the server does not know about is structurally impossible.
+ *
+ * The staircase is NOT climbed. The feet stay on the floor under it and the
+ * long legs lift the body up to the step heights. The steps collide with the
+ * BODY only: the body - which sits on top of the legs - is stopped by a step's
+ * vertical front face until the legs are tall enough to carry it over that
+ * step's top, while the legs themselves pass through the stairs. Nothing
+ * checks a player's level; a step's level is a recommendation of how tall the
+ * legs need to be to get the body past it.
  *
  * Orientation: the staircase climbs along +Z. At spawn the player faces +Z, so
  * their LEFT is +X and their RIGHT is -X (the camera's right is -X at yaw 0).
  */
 
-export type SolidKind = 'hubFloor' | 'hubWall' | 'step' | 'pit' | 'winPad' | 'bootPad' | 'treadmill' | 'stall';
+/**
+ * `step` solids are special: they collide with the player's BODY only (see
+ * `WorldCollision.resolveAxis`), never with the feet or legs.
+ */
+export type SolidKind = 'hubFloor' | 'hubWall' | 'stairFloor' | 'step' | 'foodPad' | 'diningTable' | 'stall';
 
 export interface CourseSolid extends Aabb {
   readonly kind: SolidKind;
-  /** Biome index for steps and pads, 0 for the hub. */
-  readonly biome: number;
 }
 
-// ----------------------------------------------------------------- biomes
+// ---------------------------------------------------------------- stairs
 
-export interface BiomeDefinition {
-  /** 1-based. */
-  readonly index: number;
-  readonly name: string;
-  /** Staircase platforms in this biome. */
-  readonly steps: number;
-  /** How far each step rises above the one before it. */
-  readonly rise: number;
+export const STAIRS = {
+  /** How many steps, bottom to top. */
+  count: 48,
   /** Step length along Z. */
-  readonly depth: number;
-  /** Step width along X. */
-  readonly width: number;
-  /** Open gap along Z before each step. A miss is a fall. */
-  readonly gap: number;
-  /** Wins the biome's pad pays, before the aura multiplier. */
-  readonly wins: number;
-}
+  depth: 22,
+  /** Step width along X; also the width of the walkway under the stairs. */
+  width: 60,
+  /**
+   * A step's top sits at this fraction of the leg reach at its recommended
+   * level, so a player at that level stands just tall enough to reach it.
+   */
+  reachFraction: 0.95,
+  /** Height of the walkway's side walls and far end wall (visual; the sides are a clamp). */
+  wallHeight: 24,
+} as const;
+
+/** Recommended level for a step: 5, then 25, 50, 75, ... (25 per step). Informational only. */
+export const STEP_LEVELS = { first: 5, perStep: 25 } as const;
+
+/** Level recommended for a 1-based step number. Never a requirement. */
+export const stepRecommendedLevel = (step: number): number => {
+  const n = Math.max(1, Math.floor(step));
+  return n === 1 ? STEP_LEVELS.first : STEP_LEVELS.perStep * (n - 1);
+};
 
 /**
- * THE difficulty and reward ladder. One row per biome.
- *
- * Rise is what gates progress: a step can only be reached by a jump taller
- * than its rise (air jumps stack), and jump height comes from level, rebirth
- * jumps and equipment. Gaps appear from Crystal on; widths and depths narrow.
+ * Wins each step's pad pays, before the pets' multiplier: one entry per step,
+ * bottom to top. Roughly x2.5 a step at first, easing to x1.45 at the top so
+ * the upper steps pay for the Jungle, Desert and Ocean eggs.
  */
-export const BIOMES: readonly BiomeDefinition[] = [
-  // Rise is the jump height a single jump needs (air jumps stack). Rough level
-  // needed with ONE jump: Grassland 1, Forest 7, Ocean 14, Crystal 25 (the
-  // first rebirth). From Desert on, rebirth jumps and equipment are expected:
-  // Desert ~L17 with 2 jumps, Snow Peak ~L25 with 3, Galaxy Core ~L47 with 9.
-  { index: 1, name: 'Grassland', steps: 3, rise: 5, depth: 26, width: 64, gap: 0, wins: 1 },
-  { index: 2, name: 'Forest', steps: 3, rise: 18, depth: 26, width: 62, gap: 0, wins: 3 },
-  { index: 3, name: 'Ocean', steps: 3, rise: 32, depth: 24, width: 60, gap: 2, wins: 5 },
-  { index: 4, name: 'Crystal', steps: 3, rise: 52, depth: 24, width: 58, gap: 3, wins: 15 },
-  { index: 5, name: 'Desert', steps: 3, rise: 80, depth: 24, width: 56, gap: 4, wins: 25 },
-  { index: 6, name: 'High Mountain', steps: 3, rise: 115, depth: 22, width: 54, gap: 5, wins: 40 },
-  { index: 7, name: 'Snow Peak', steps: 3, rise: 160, depth: 22, width: 52, gap: 6, wins: 100 },
-  { index: 8, name: 'Volcano', steps: 3, rise: 215, depth: 22, width: 50, gap: 7, wins: 300 },
-  { index: 9, name: 'Cloud Kingdom', steps: 4, rise: 285, depth: 22, width: 48, gap: 8, wins: 1_000 },
-  { index: 10, name: 'Aurora Sky', steps: 4, rise: 370, depth: 22, width: 46, gap: 9, wins: 4_000 },
-  { index: 11, name: 'Candy Heaven', steps: 4, rise: 470, depth: 20, width: 44, gap: 10, wins: 20_000 },
-  { index: 12, name: 'Stratosphere', steps: 4, rise: 590, depth: 20, width: 42, gap: 11, wins: 120_000 },
-  { index: 13, name: 'Outer Space', steps: 4, rise: 730, depth: 20, width: 40, gap: 12, wins: 800_000 },
-  { index: 14, name: 'Galaxy Core', steps: 4, rise: 900, depth: 20, width: 38, gap: 12, wins: 10_000_000 },
+export const STEP_WINS: readonly number[] = [
+  1, 3, 8, 20, 50, 120, 200, 400,
+  800, 1_500, 2_500, 4_000, 6_500, 10_000, 15_000, 25_000,
+  40_000, 60_000, 90_000, 140_000, 200_000, 300_000, 450_000, 700_000,
+  1_000_000, 1_500_000, 2_200_000, 3_200_000, 4_500_000, 6_500_000, 9_000_000, 13_000_000,
+  18_000_000, 25_000_000, 35_000_000, 50_000_000, 70_000_000, 100_000_000, 140_000_000, 200_000_000,
+  300_000_000, 450_000_000, 650_000_000, 1_000_000_000, 1_500_000_000, 2_200_000_000, 3_200_000_000, 5_000_000_000,
 ];
-
-/** The step (1-based, within its biome) that carries the win pad. */
-export const WIN_PAD_STEP = 3;
 
 /** Win pad footprint and its inset from the step's left (+X) edge. */
 export const WIN_PAD = { width: 12, depth: 10, inset: 2, thickness: 0.3 } as const;
-
-/** How far below its top a step column extends. */
-const STEP_SKIRT = 40;
 
 // -------------------------------------------------------------------- hub
 
 export const HUB = {
   halfWidth: 72,
   minZ: -84,
-  /** The hub's front edge, where the first step begins. */
+  /** The hub's front edge, where the staircase begins. */
   maxZ: 44,
   floorY: 0,
-  /** Height of the hub's walls (visual; the side and back are a clamp). */
+  /** Height of the hub's walls (the side and back are a clamp; see `WALL_CLEARANCE`). */
   wallHeight: 26,
 } as const;
 
 export const STAIR_START_Z = HUB.maxZ;
 
-/** Boot pedestals: two rows of five down the player's LEFT (+X). */
-export const BOOT_SHOP = {
-  rowXs: [44, 58] as readonly number[],
-  firstZ: -58,
+/**
+ * THE tall line: across the stair mouth, a few units in front of the first
+ * step's face. Past it the legs grow to the player's leg reach; back behind
+ * it, toward the base, they shrink to normal. It sits in front of the face so
+ * a body stopped against the first step already stands on its long legs.
+ */
+export const TALL_LINE_Z = STAIR_START_Z - 3;
+
+/**
+ * The spawn area, the only place jumping works: the hub, behind the tall
+ * line. On the staircase side of the line there is no jumping at all.
+ */
+export const canJumpAt = (z: number): boolean => z < TALL_LINE_Z;
+
+/**
+ * True where the legs are long: past the tall line, in line with the
+ * staircase. Beside the mouth (still in the hub) the legs stay normal, so a
+ * long-legged body only ever stands between the staircase walls.
+ */
+export const isPastTallLine = (x: number, z: number): boolean =>
+  z >= TALL_LINE_Z && Math.abs(x) <= STAIRS.width / 2;
+
+/**
+ * Height of the bottom of the player's BODY above the walkway floor, for stair
+ * collision: the top of the long legs past the tall line, the floor itself
+ * behind it. Deliberately independent of jumping, so a hop never lifts the
+ * body over a step face it could not otherwise pass.
+ */
+export const bodyBaseAt = (x: number, z: number, reach: number): number =>
+  isPastTallLine(x, z) && Number.isFinite(reach) ? Math.max(0, reach) : 0;
+
+/** Food pedestals: three rows of five down the player's LEFT (+X). */
+export const FOOD_SHOP = {
+  rowXs: [36, 48, 60] as readonly number[],
+  firstZ: -54,
   spacingZ: 13,
   padSize: 7,
   padTop: 0.35,
   perRow: 5,
 } as const;
 
-/** The equipment stall, just before the staircase on the player's RIGHT. */
-export const EQUIPMENT_STALL = {
+/** The Egg Shop, just before the staircase on the player's RIGHT. */
+export const EGG_SHOP = {
   x: -34,
   z: 34,
   /** Counter footprint (solid). */
   width: 12,
   depth: 3,
   height: 2.6,
-  /** Standing in this rectangle opens the shop and allows purchases. */
+  /** Standing in this rectangle opens the shop and allows hatching. */
   zone: { minX: -44, maxX: -24, minZ: 20, maxZ: 32.5 },
 } as const;
 
@@ -121,13 +150,13 @@ export const SCOREBOARD = {
   zs: [-58, -26, 6] as readonly number[],
 } as const;
 
-export const bootPadCentre = (slot: number): { x: number; z: number } => {
+export const foodPadCentre = (slot: number): { x: number; z: number } => {
   const index = Math.max(0, Math.floor(slot) - 1);
-  const row = Math.floor(index / BOOT_SHOP.perRow);
-  const column = index % BOOT_SHOP.perRow;
+  const row = Math.floor(index / FOOD_SHOP.perRow);
+  const column = index % FOOD_SHOP.perRow;
   return {
-    x: BOOT_SHOP.rowXs[row] ?? BOOT_SHOP.rowXs[0] ?? 0,
-    z: BOOT_SHOP.firstZ + column * BOOT_SHOP.spacingZ,
+    x: FOOD_SHOP.rowXs[row] ?? FOOD_SHOP.rowXs[0] ?? 0,
+    z: FOOD_SHOP.firstZ + column * FOOD_SHOP.spacingZ,
   };
 };
 
@@ -136,91 +165,47 @@ export const bootPadCentre = (slot: number): { x: number; z: number } => {
 export interface StepDefinition {
   /** 0-based across the whole staircase. */
   readonly index: number;
-  readonly biome: number;
-  /** 1-based within its biome. */
-  readonly step: number;
+  /** 1-based: what the level sign and the pad say. */
+  readonly number: number;
   readonly minX: number;
   readonly maxX: number;
   readonly minZ: number;
   readonly maxZ: number;
+  /** Height of the step's top above the walkway floor. */
   readonly top: number;
-  readonly bottom: number;
+  /** Informational: the level whose legs reach this step's top. */
+  readonly recommendedLevel: number;
+  readonly wins: number;
 }
 
 export interface WinPadDefinition extends Aabb {
-  readonly biome: number;
+  /** 1-based step number the pad sits on. */
+  readonly step: number;
   readonly wins: number;
 }
 
 const buildSteps = (): StepDefinition[] => {
   const steps: StepDefinition[] = [];
-  let z = STAIR_START_Z;
-  let top = HUB.floorY;
-  for (const biome of BIOMES) {
-    for (let s = 1; s <= biome.steps; s += 1) {
-      if (steps.length > 0) z += biome.gap;
-      top += biome.rise;
-      steps.push({
-        index: steps.length,
-        biome: biome.index,
-        step: s,
-        minX: -biome.width / 2,
-        maxX: biome.width / 2,
-        minZ: z,
-        maxZ: z + biome.depth,
-        top,
-        bottom: top - biome.rise - STEP_SKIRT,
-      });
-      z += biome.depth;
-    }
+  for (let i = 0; i < STAIRS.count; i += 1) {
+    const number = i + 1;
+    const recommendedLevel = stepRecommendedLevel(number);
+    const minZ = STAIR_START_Z + i * STAIRS.depth;
+    steps.push({
+      index: i,
+      number,
+      minX: -STAIRS.width / 2,
+      maxX: STAIRS.width / 2,
+      minZ,
+      maxZ: minZ + STAIRS.depth,
+      top: Math.round(legReach(recommendedLevel) * STAIRS.reachFraction * 10) / 10,
+      recommendedLevel,
+      wins: STEP_WINS[i] ?? STEP_WINS[STEP_WINS.length - 1] ?? 1,
+    });
   }
   return steps;
 };
 
 export const STEPS: readonly StepDefinition[] = buildSteps();
-
-/**
- * How far below the step before it a gap's floor sits.
- *
- * Every gap HAS a floor. Missing a jump is never punished with a respawn: the
- * player drops into a shallow pit and jumps straight back out, onto the step
- * they came from or at the step they missed.
- */
-export const PIT_DEPTH = 6;
-
-/** Thickness of the column under a pit floor. */
-const PIT_SKIRT = 20;
-
-export interface PitDefinition {
-  readonly biome: number;
-  readonly minX: number;
-  readonly maxX: number;
-  readonly minZ: number;
-  readonly maxZ: number;
-  /** Top of the pit floor. */
-  readonly floor: number;
-}
-
-const buildPits = (): PitDefinition[] => {
-  const pits: PitDefinition[] = [];
-  for (let i = 1; i < STEPS.length; i += 1) {
-    const before = STEPS[i - 1] as StepDefinition;
-    const after = STEPS[i] as StepDefinition;
-    if (after.minZ - before.maxZ <= 1e-9) continue;
-    pits.push({
-      biome: after.biome,
-      // As wide as the step before it, which is what the side clamp uses in a gap.
-      minX: before.minX,
-      maxX: before.maxX,
-      minZ: before.maxZ,
-      maxZ: after.minZ,
-      floor: before.top - PIT_DEPTH,
-    });
-  }
-  return pits;
-};
-
-export const PITS: readonly PitDefinition[] = buildPits();
 
 const lastStep = STEPS[STEPS.length - 1] as StepDefinition;
 
@@ -229,14 +214,12 @@ export const COURSE_END_Z = lastStep.maxZ;
 
 /** Top of the highest step. */
 export const COURSE_TOP_Y = lastStep.top;
-
-export const WIN_PADS: readonly WinPadDefinition[] = BIOMES.map((biome) => {
-  const step = STEPS.find((s) => s.biome === biome.index && s.step === WIN_PAD_STEP);
-  if (!step) throw new Error(`biome ${biome.index} has no step ${WIN_PAD_STEP}`);
+/** ONE win pad on EVERY step's top, on the player's left (+X). */
+export const WIN_PADS: readonly WinPadDefinition[] = STEPS.map((step) => {
   const centreZ = (step.minZ + step.maxZ) / 2;
   return {
-    biome: biome.index,
-    wins: biome.wins,
+    step: step.number,
+    wins: step.wins,
     maxX: step.maxX - WIN_PAD.inset,
     minX: step.maxX - WIN_PAD.inset - WIN_PAD.width,
     minZ: centreZ - WIN_PAD.depth / 2,
@@ -246,78 +229,71 @@ export const WIN_PADS: readonly WinPadDefinition[] = BIOMES.map((biome) => {
   };
 });
 
-export const biomeByIndex = (index: number): BiomeDefinition | undefined =>
-  BIOMES.find((biome) => biome.index === Math.floor(index));
+export const stepByNumber = (number: number): StepDefinition | undefined =>
+  Number.isInteger(number) ? STEPS[number - 1] : undefined;
 
 const box = (
   kind: SolidKind,
-  biome: number,
   minX: number,
   maxX: number,
   minY: number,
   maxY: number,
   minZ: number,
   maxZ: number,
-): CourseSolid => ({ kind, biome, minX, maxX, minY, maxY, minZ, maxZ });
+): CourseSolid => ({ kind, minX, maxX, minY, maxY, minZ, maxZ });
 
 const buildSolids = (): CourseSolid[] => {
   const solids: CourseSolid[] = [];
-  const firstHalf = (BIOMES[0]?.width ?? 64) / 2;
+  const half = STAIRS.width / 2;
 
-  solids.push(
-    box('hubFloor', 0, -HUB.halfWidth, HUB.halfWidth, HUB.floorY - 4, HUB.floorY, HUB.minZ, HUB.maxZ),
-  );
+  solids.push(box('hubFloor', -HUB.halfWidth, HUB.halfWidth, HUB.floorY - 4, HUB.floorY, HUB.minZ, HUB.maxZ));
 
-  // The hub's front wall either side of the staircase mouth. SOLID, so a player
+  // The hub's front wall either side of the stair mouth. SOLID, so a player
   // walking along the front of the hub is stopped rather than clamped sideways.
+  // Its inner edges sit `WALL_CLEARANCE - BODY_RADIUS` inside the mouth, so a
+  // body stopped against them is exactly where the walkway clamp puts it.
   const wallTop = HUB.floorY + 400;
+  const mouth = half - (WALL_CLEARANCE - BODY_RADIUS);
   solids.push(
-    box('hubWall', 0, firstHalf, HUB.halfWidth + 2, HUB.floorY - 4, wallTop, HUB.maxZ, HUB.maxZ + 2),
-    box('hubWall', 0, -HUB.halfWidth - 2, -firstHalf, HUB.floorY - 4, wallTop, HUB.maxZ, HUB.maxZ + 2),
+    box('hubWall', mouth, HUB.halfWidth + 2, HUB.floorY - 4, wallTop, HUB.maxZ, HUB.maxZ + 2),
+    box('hubWall', -HUB.halfWidth - 2, -mouth, HUB.floorY - 4, wallTop, HUB.maxZ, HUB.maxZ + 2),
   );
 
+  // The walkway under the whole staircase: the feet stay on this floor.
+  solids.push(box('stairFloor', -half, half, HUB.floorY - 4, HUB.floorY, STAIR_START_Z, COURSE_END_Z));
+
+  // The steps, from the floor to their tops. BODY-only solids: their front
+  // faces stop the body while the legs pass through (see `WorldCollision`).
   for (const step of STEPS) {
+    solids.push(box('step', step.minX, step.maxX, HUB.floorY, step.top, step.minZ, step.maxZ));
+  }
+
+  const padHalf = FOOD_SHOP.padSize / 2;
+  for (const tier of FOOD_TIERS) {
+    const c = foodPadCentre(tier.slot);
     solids.push(
-      box('step', step.biome, step.minX, step.maxX, step.bottom, step.top, step.minZ, step.maxZ),
+      box('foodPad', c.x - padHalf, c.x + padHalf, HUB.floorY, HUB.floorY + FOOD_SHOP.padTop, c.z - padHalf, c.z + padHalf),
     );
   }
 
-  for (const pit of PITS) {
-    solids.push(box('pit', pit.biome, pit.minX, pit.maxX, pit.floor - PIT_SKIRT, pit.floor, pit.minZ, pit.maxZ));
-  }
-
-  for (const pad of WIN_PADS) {
-    solids.push(box('winPad', pad.biome, pad.minX, pad.maxX, pad.minY, pad.maxY, pad.minZ, pad.maxZ));
-  }
-
-  const half = BOOT_SHOP.padSize / 2;
-  for (const tier of BOOT_TIERS) {
-    const c = bootPadCentre(tier.slot);
-    solids.push(
-      box('bootPad', 0, c.x - half, c.x + half, HUB.floorY, HUB.floorY + BOOT_SHOP.padTop, c.z - half, c.z + half),
-    );
-  }
-
-  for (const x of TRAINING.xs) {
+  for (const x of DINING.xs) {
     solids.push(
       box(
-        'treadmill',
-        0,
-        x - TRAINING.beltWidth / 2,
-        x + TRAINING.beltWidth / 2,
+        'diningTable',
+        x - DINING.tableWidth / 2,
+        x + DINING.tableWidth / 2,
         HUB.floorY,
-        HUB.floorY + TRAINING.deckTop,
-        TRAINING.centerZ - TRAINING.beltLength / 2,
-        TRAINING.centerZ + TRAINING.beltLength / 2,
+        HUB.floorY + DINING.tableHeight,
+        DINING.centerZ - DINING.tableDepth / 2,
+        DINING.centerZ + DINING.tableDepth / 2,
       ),
     );
   }
 
-  const stall = EQUIPMENT_STALL;
+  const stall = EGG_SHOP;
   solids.push(
     box(
       'stall',
-      0,
       stall.x - stall.width / 2,
       stall.x + stall.width / 2,
       HUB.floorY,
@@ -332,62 +308,56 @@ const buildSolids = (): CourseSolid[] => {
 
 export const COURSE_SOLIDS: readonly CourseSolid[] = buildSolids();
 
+/** Chair centres in world space, for the renderer. */
+export const DINING_CHAIRS: readonly { readonly table: number; readonly x: number; readonly z: number }[] =
+  DINING.xs.flatMap((x, table) =>
+    CHAIR_OFFSETS.map((chair) => ({ table: table + 1, x: x + chair.x, z: DINING.centerZ + chair.z })),
+  );
+
 // ---------------------------------------------------------------- queries
 
-/** The last step whose front edge is at or behind `z`, or null in the hub. */
+/** The step whose footprint `z` is in, or null outside the staircase. */
 export const stepBehind = (z: number): StepDefinition | null => {
-  if (z < STAIR_START_Z) return null;
-  let lo = 0;
-  let hi = STEPS.length - 1;
-  let found: StepDefinition | null = null;
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    const step = STEPS[mid] as StepDefinition;
-    if (step.minZ <= z) {
-      found = step;
-      lo = mid + 1;
-    } else {
-      hi = mid - 1;
-    }
-  }
-  return found;
+  if (z < STAIR_START_Z || z >= COURSE_END_Z) return null;
+  return STEPS[Math.min(STEPS.length - 1, Math.floor((z - STAIR_START_Z) / STAIRS.depth))] ?? null;
 };
-
-/** The biome a Z position is in, 0 for the hub. */
-export const biomeAt = (z: number): number => stepBehind(z)?.biome ?? 0;
 
 /** Half the walkable width at `z`. */
-export const halfWidthAt = (z: number): number => {
-  const step = stepBehind(z);
-  return step ? (step.maxX - step.minX) / 2 : HUB.halfWidth;
-};
+export const halfWidthAt = (z: number): number => (z >= STAIR_START_Z ? STAIRS.width / 2 : HUB.halfWidth);
 
-/** The biome whose win pad the feet are on, or 0. */
-export const winPadAt = (x: number, y: number, z: number): number => {
+/** How far below a pad's top the top of the legs may be and still count as reaching it. */
+const REACH_TOLERANCE = 0.05;
+
+/**
+ * The 1-based number of the step whose win pad this player REACHES, or 0.
+ *
+ * The feet are on the walkway under the stairs; the player reaches a pad when
+ * they stand inside its footprint and the top of their legs (`feetY + legReach`)
+ * is at or above the pad. Taller is fine - a pad is reached, or passed.
+ */
+export const winPadAt = (x: number, feetY: number, z: number, reach: number): number => {
   const step = stepBehind(z);
-  if (!step || step.step !== WIN_PAD_STEP) return 0;
-  const pad = WIN_PADS[step.biome - 1];
+  if (!step) return 0;
+  const pad = WIN_PADS[step.index];
   if (!pad) return 0;
   if (x < pad.minX || x > pad.maxX || z < pad.minZ || z > pad.maxZ) return 0;
-  if (y < pad.minY - 0.5 || y > pad.maxY + 1.5) return 0;
-  return pad.biome;
+  const top = feetY + (Number.isFinite(reach) ? Math.max(0, reach) : 0);
+  return top >= pad.minY - REACH_TOLERANCE ? pad.step : 0;
 };
 
-/** The boot pedestal the feet are on, or 0. */
-export const bootPadAt = (x: number, y: number, z: number): number => {
-  if (y > HUB.floorY + BOOT_SHOP.padTop + 1 || z > STAIR_START_Z) return 0;
-  const half = BOOT_SHOP.padSize / 2 - 0.3;
-  for (const tier of BOOT_TIERS) {
-    const c = bootPadCentre(tier.slot);
+/** The food pedestal the feet are on, or 0. */
+export const foodPadAt = (x: number, y: number, z: number): number => {
+  if (y > HUB.floorY + FOOD_SHOP.padTop + 1 || z > STAIR_START_Z) return 0;
+  const half = FOOD_SHOP.padSize / 2 - 0.3;
+  for (const tier of FOOD_TIERS) {
+    const c = foodPadCentre(tier.slot);
     if (Math.abs(x - c.x) <= half && Math.abs(z - c.z) <= half) return tier.slot;
   }
   return 0;
 };
 
-/** True while standing at the equipment stall. */
-export const inShopZone = (x: number, y: number, z: number): boolean => {
-  const zone = EQUIPMENT_STALL.zone;
-  return (
-    y < HUB.floorY + 2 && x >= zone.minX && x <= zone.maxX && z >= zone.minZ && z <= zone.maxZ
-  );
+/** True while standing at the Egg Shop. */
+export const inHatchZone = (x: number, y: number, z: number): boolean => {
+  const zone = EGG_SHOP.zone;
+  return y < HUB.floorY + 2 && x >= zone.minX && x <= zone.maxX && z >= zone.minZ && z <= zone.maxZ;
 };

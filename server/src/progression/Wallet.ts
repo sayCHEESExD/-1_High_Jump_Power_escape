@@ -4,8 +4,8 @@ import type { PlayerState } from '../rooms/state/PlayerState.js';
 /**
  * The ONE place Wins are added or removed.
  *
- * Win pads add; boots, trails, auras and equipment spend. Four shops must not
- * become four ways to take payment, so every one of them goes through here.
+ * Win pads and Bux grants add; foods, trails and eggs spend. Three shops must
+ * not become three ways to take payment, so every one of them goes through here.
  */
 export const wallet = {
   /** Credit Wins, saturating at the ceiling. Returns what was actually added. */

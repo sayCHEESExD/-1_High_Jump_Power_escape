@@ -5,12 +5,11 @@ import {
   SPAWN_POSITION,
   SPAWN_ROTATION_Y,
   handleFor,
-  shopSecondsLeft,
-  shopSlotAt,
   type BloxityIdentityMessage,
   type ClaimWinMessage,
   type IndexMessage,
   type MoveMessage,
+  type PetHatchedMessage,
   type RespawnMessage,
   type RespawnReason,
   type SlotMessage,
@@ -20,11 +19,11 @@ import { verifyBloxityToken } from '../bloxity/bloxityIdentity.js';
 import { buxGrants } from '../bloxity/buxGrantsStore.js';
 import { serverConfig } from '../config/serverConfig.js';
 import { MovementService } from '../movement/MovementService.js';
-import { BootService } from '../progression/BootService.js';
-import { AURA_BINDING, CosmeticService, TRAIL_BINDING } from '../progression/CosmeticService.js';
-import { EnergyService } from '../progression/EnergyService.js';
-import { EquipmentService } from '../progression/EquipmentService.js';
+import { CosmeticService, TRAIL_BINDING } from '../progression/CosmeticService.js';
+import { FoodService } from '../progression/FoodService.js';
+import { FoodShopService } from '../progression/FoodShopService.js';
 import { leaderboardService } from '../progression/LeaderboardService.js';
+import { PetService } from '../progression/PetService.js';
 import { profileStore } from '../progression/ProfileStore.js';
 import { RebirthService } from '../progression/RebirthService.js';
 import { wallet } from '../progression/Wallet.js';
@@ -65,13 +64,12 @@ export class GameRoom extends Room<GameState> {
   override autoDispose = true;
 
   private readonly movement = new MovementService();
-  private readonly energy = new EnergyService();
+  private readonly food = new FoodService();
   private readonly winService = new WinService();
   private readonly rebirths = new RebirthService();
-  private readonly boots = new BootService();
+  private readonly foodShop = new FoodShopService();
   private readonly trails = new CosmeticService(TRAIL_BINDING);
-  private readonly auras = new CosmeticService(AURA_BINDING);
-  private readonly equipment = new EquipmentService();
+  private readonly pets = new PetService();
 
   private readonly playerIds = new Map<string, string>();
   private readonly lastRequest = new Map<string, number>();
@@ -89,7 +87,6 @@ export class GameRoom extends Room<GameState> {
   override onCreate(): void {
     this.setState(new GameState());
     this.setPatchRate(serverConfig.patchRateMs);
-    this.updateShopClock();
 
     this.onMessage(MessageType.Move, (client, message: MoveMessage) => this.onMove(client, message));
     this.onMessage(MessageType.RequestRespawn, (client) => this.respawn(client, 'manual'));
@@ -98,43 +95,44 @@ export class GameRoom extends Room<GameState> {
     );
     this.onMessage(MessageType.Rebirth, (client) =>
       this.request(client, (player) => {
-        if (!this.rebirths.rebirth(player, this.energy)) return;
+        if (!this.rebirths.rebirth(player, this.food)) return;
         this.placeAt(client, player, 'rebirth');
         logger.info(SCOPE, `${client.sessionId} rebirthed to ${player.rebirths}`);
       }),
     );
-    this.onMessage(MessageType.BuyBoot, (client, message: SlotMessage) =>
+    this.onMessage(MessageType.BuyFood, (client, message: SlotMessage) =>
       this.request(client, (player) => {
-        if (this.boots.claim(player, Number(message?.slot), this.energy) === null) {
-          logger.info(SCOPE, `${client.sessionId} bought boot ${message.slot}`);
+        if (this.foodShop.claim(player, Number(message?.slot), this.food) === null) {
+          logger.info(SCOPE, `${client.sessionId} bought food ${message.slot}`);
         }
       }),
     );
     this.onMessage(MessageType.BuyTrail, (client, message: SlotMessage) =>
-      this.request(client, (player) => this.trails.buy(player, Number(message?.slot), this.energy)),
+      this.request(client, (player) => this.trails.buy(player, Number(message?.slot), this.food)),
     );
     this.onMessage(MessageType.EquipTrail, (client, message: SlotMessage) =>
-      this.request(client, (player) => this.trails.equip(player, Number(message?.slot), this.energy)),
+      this.request(client, (player) => this.trails.equip(player, Number(message?.slot), this.food)),
     );
-    this.onMessage(MessageType.BuyAura, (client, message: SlotMessage) =>
-      this.request(client, (player) => this.auras.buy(player, Number(message?.slot), this.energy)),
+    this.onMessage(MessageType.HatchEgg, (client, message: SlotMessage) =>
+      this.request(client, (player) => {
+        const result = this.pets.hatch(player, Number(message?.slot), this.food);
+        if (!result.pet) return;
+        const payload: PetHatchedMessage = { egg: Math.floor(Number(message.slot)), pet: result.pet.id };
+        client.send(MessageType.PetHatched, payload);
+        logger.info(SCOPE, `${client.sessionId} hatched ${result.pet.id} from egg ${payload.egg}`);
+      }),
     );
-    this.onMessage(MessageType.EquipAura, (client, message: SlotMessage) =>
-      this.request(client, (player) => this.auras.equip(player, Number(message?.slot), this.energy)),
+    this.onMessage(MessageType.TogglePet, (client, message: IndexMessage) =>
+      this.request(client, (player) => this.pets.toggle(player, Number(message?.index), this.food)),
     );
-    this.onMessage(MessageType.BuyItem, (client, message: IndexMessage) =>
-      this.request(client, (player) =>
-        this.equipment.buy(player, Number(message?.index), this.state.shopSlot, this.energy),
-      ),
+    this.onMessage(MessageType.EquipAllPets, (client) =>
+      this.request(client, (player) => this.pets.equipAll(player, this.food)),
     );
-    this.onMessage(MessageType.EquipBest, (client) =>
-      this.request(client, (player) => this.equipment.equipBest(player, this.energy)),
+    this.onMessage(MessageType.EquipBestPets, (client) =>
+      this.request(client, (player) => this.pets.equipBest(player, this.food)),
     );
-    this.onMessage(MessageType.ToggleItem, (client, message: IndexMessage) =>
-      this.request(client, (player) => this.equipment.toggle(player, Number(message?.index), this.energy)),
-    );
-    this.onMessage(MessageType.DeleteItem, (client, message: IndexMessage) =>
-      this.request(client, (player) => this.equipment.remove(player, Number(message?.index), this.energy)),
+    this.onMessage(MessageType.DeletePet, (client, message: IndexMessage) =>
+      this.request(client, (player) => this.pets.remove(player, Number(message?.index), this.food)),
     );
 
     this.onMessage(MessageType.BloxityIdentity, (client, message: BloxityIdentityMessage) =>
@@ -161,12 +159,12 @@ export class GameRoom extends Room<GameState> {
     if (playerId) this.playerIds.set(client.sessionId, playerId);
     player.handle = handleFor(playerId || client.sessionId);
 
-    // Restore BEFORE deriving: height, jump physics and rates follow from it.
+    // Restore BEFORE deriving: height, leg reach and rates follow from it.
     const restored = playerId ? profileStore.restore(playerId, player) : false;
 
     this.state.players.set(client.sessionId, player);
     this.movement.initialise(player);
-    this.energy.initialise(player);
+    this.food.initialise(player);
     this.placeAt(client, player, 'join');
 
     // In the background: a join must not wait on a round trip to Bloxity.
@@ -186,7 +184,7 @@ export class GameRoom extends Room<GameState> {
     this.persist(client.sessionId, player);
     this.state.players.delete(client.sessionId);
     this.movement.forget(client.sessionId);
-    this.energy.forget(client.sessionId);
+    this.food.forget(client.sessionId);
     this.winService.forget(client.sessionId);
     this.playerIds.delete(client.sessionId);
     this.lastRequest.delete(client.sessionId);
@@ -205,18 +203,18 @@ export class GameRoom extends Room<GameState> {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
     if (!this.movement.applyInput(client.sessionId, player, message)) return;
-    this.energy.credit(client.sessionId, player, this.movement.lastStep);
+    this.food.credit(client.sessionId, player, this.movement.lastStep);
   }
 
   private onClaimWin(client: Client, message: ClaimWinMessage): void {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
-    const result = this.winService.claim(player, Number(message?.biome), Date.now());
+    const result = this.winService.claim(player, Number(message?.step), Date.now());
     if (!result.granted) {
-      if (result.reason !== 'cooldown') {
+      if (result.reason !== 'cooldown' && result.reason !== 'already-claimed') {
         logger.warn(
           SCOPE,
-          `win claim ${message?.biome} refused for ${client.sessionId} (${result.reason}) at ` +
+          `win claim ${message?.step} refused for ${client.sessionId} (${result.reason}) at ` +
             `(${player.x.toFixed(1)}, ${player.y.toFixed(1)}, ${player.z.toFixed(1)})`,
         );
       }
@@ -224,15 +222,15 @@ export class GameRoom extends Room<GameState> {
     }
 
     const payload: WinAwardedMessage = {
-      biome: Math.floor(Number(message.biome)),
+      step: Math.floor(Number(message.step)),
       wins: result.wins,
       total: player.wins,
     };
     client.send(MessageType.WinAwarded, payload);
-    // Banking a win ends the run. No checkpoints: straight back to spawn.
+    // Banking a win ends the attempt. No checkpoints: straight back to spawn.
     this.placeAt(client, player, 'win');
     this.persist(client.sessionId, player);
-    logger.info(SCOPE, `biome ${payload.biome} banked by ${client.sessionId} (+${result.wins})`);
+    logger.info(SCOPE, `step ${payload.step} banked by ${client.sessionId} (+${result.wins})`);
   }
 
   /** Rate-limited wrapper for every menu and shop request. */
@@ -247,13 +245,12 @@ export class GameRoom extends Room<GameState> {
   }
 
   private tick(delta: number): void {
-    this.updateShopClock();
     leaderboardService.update(delta, this.state.leaderboard, this.state.players, this.playerIds);
 
     for (const [sessionId, player] of this.state.players) {
       player.playSeconds += delta;
       if (!player.ready) continue;
-      // Missing a jump never moves anyone - gaps have floors. This only rescues
+      // Missing a step never moves anyone - gaps have floors. This only rescues
       // a player a glitch has left outside the world entirely.
       if (this.movement.collision.isOutOfWorld(player.y)) {
         const client = this.clients.find((c) => c.sessionId === sessionId);
@@ -322,14 +319,6 @@ export class GameRoom extends Room<GameState> {
     this.persist(sessionId, player);
   }
 
-  private updateShopClock(): void {
-    const now = Date.now();
-    const slot = shopSlotAt(now);
-    const remaining = shopSecondsLeft(now);
-    if (this.state.shopSlot !== slot) this.state.shopSlot = slot;
-    if (this.state.shopRemaining !== remaining) this.state.shopRemaining = remaining;
-  }
-
   private respawn(client: Client, reason: RespawnReason): void {
     const player = this.state.players.get(client.sessionId);
     if (player) this.placeAt(client, player, reason);
@@ -338,7 +327,8 @@ export class GameRoom extends Room<GameState> {
   /**
    * THE one way a player is placed, and there is exactly ONE destination: the
    * hub spawn. This takes no position for that reason - a placement that could
-   * land elsewhere is a checkpoint system waiting to be reintroduced.
+   * land elsewhere is a checkpoint system waiting to be reintroduced. Every
+   * placement starts a fresh attempt, so each win pad can pay again once.
    */
   private placeAt(client: Client, player: PlayerState, reason: RespawnReason): void {
     const from = `(${player.x.toFixed(1)}, ${player.y.toFixed(1)}, ${player.z.toFixed(1)})`;
@@ -350,7 +340,8 @@ export class GameRoom extends Room<GameState> {
       SPAWN_POSITION.z,
       SPAWN_ROTATION_Y,
     );
-    this.energy.reset(client.sessionId, player);
+    this.food.reset(client.sessionId, player);
+    this.winService.startAttempt(client.sessionId);
 
     const message: RespawnMessage = {
       x: SPAWN_POSITION.x,

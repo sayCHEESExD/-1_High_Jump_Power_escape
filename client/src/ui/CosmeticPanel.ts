@@ -12,10 +12,10 @@ export interface CosmeticRow {
 }
 
 export interface CosmeticPanelOptions {
-  readonly variant: 'trail' | 'aura';
+  readonly variant: 'trail';
   readonly title: string;
   readonly icon: string;
-  /** Icon beside the multiplier: energy for trails, trophy for auras. */
+  /** Icon beside the multiplier: food for trails. */
   readonly multiplierIcon: string;
   readonly rows: readonly CosmeticRow[];
   onBuy(slot: number): void;
@@ -25,7 +25,7 @@ export interface CosmeticPanelOptions {
 const hex = (value: number): string => `#${value.toString(16).padStart(6, '0')}`;
 
 /**
- * The Trails and Aura menus, as in the reference: a gradient row per tier with
+ * The Trails menu, as in the reference: a gradient row per tier with
  * the swatch, the name, the multiplier, and a Wins price or Equip button.
  *
  * Mirrors replicated ownership; every button only asks the server.

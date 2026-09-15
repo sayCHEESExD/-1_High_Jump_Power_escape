@@ -31,7 +31,7 @@ const body = (over = {}) =>
     transactionId: 'txn-1',
     userId: 'user-a',
     username: 'alice',
-    gameSlug: 'high-jump-power-escape',
+    gameSlug: 'tall-escape',
     sku: 'wins_small',
     productName: 'Pouch of Wins',
     productPrice: 100,
@@ -80,12 +80,11 @@ console.log('\nwebhook payloads\n');
   const unknown = processBuxWebhook('s3cret', body({ transactionId: 'txn-x', sku: 'from_the_future' }), grants, SIGNED);
   check('an unknown SKU is still 2xx, so a real purchase is not refunded', unknown.status === 200);
   check('and grants nothing', grants.drain('user-a').length === 0);
-  check('the price in the payload is never used as a grant', !Object.values(SKU_WINS).includes(100));
-}
+  check('the price in the payload is never used as a grant', !Object.values(SKU_WINS).includes(100));}
 
 console.log('\npersistence\n');
 {
-  const dir = mkdtempSync(join(tmpdir(), 'highjump-bux-'));
+  const dir = mkdtempSync(join(tmpdir(), 'tallescape-bux-'));
   const file = join(dir, 'bux-grants.json');
   try {
     const before = new BuxGrants(file);

@@ -24,7 +24,7 @@ export interface SignLine {
  * A floating text panel, drawn on a canvas.
  *
  * All of this game's world text - the finish banners, the "+N SPEED" over each
- * upgrade tile, the treadmill labels, the leaderboards - is one of these.
+ * upgrade tile, the dining table labels, the leaderboards - is one of these.
  * Canvas rather than a font file because the style is a heavy stroked display
  * face a browser can draw directly, and because a font file would be the single
  * largest asset in a build that otherwise has almost none.
@@ -119,13 +119,14 @@ const FONT = '"Arial Black", "Segoe UI", system-ui, sans-serif';
  * to do anything - the fix for clipped text is never "make the text smaller",
  * that is the symptom treated as the cure.
  */
-const drawLines = (
+export const drawLines = (
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
   lines: readonly SignLine[],
+  clear = true,
 ): void => {
-  ctx.clearRect(0, 0, width, height);
+  if (clear) ctx.clearRect(0, 0, width, height);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';

@@ -25,18 +25,18 @@ import {
   tuft,
   type Part,
   type Prop,
-} from './BiomeDecor.js';
+} from './PropKit.js';
 
 /**
  * Scenery that makes the spawn hub feel lived in: trees, bushes and flower
  * beds in the corners, lamp posts along the walkway, benches facing the
- * leaderboards and the Wins Shop, flower planters beside spawn, flags,
+ * leaderboards and the Food Shop, flower planters beside spawn, flags,
  * bunting over the stair mouth, bobbing balloon clusters and a glowing spawn
  * ring.
  *
- * Built from the same box prop kit as the biome scenery, merged into one lit
+ * Built from the box prop kit (`PropKit`), merged into one lit
  * and one glowing mesh, plus a handful of small animated groups. None of it
- * collides, and it keeps clear of the boot pads, treadmills, stall zone and
+ * collides, and it keeps clear of the food pads, dining tables, egg stall zone and
  * the walkway from spawn to the stairs.
  */
 
@@ -143,16 +143,16 @@ export class HubDecor {
       [-18, -40, 0],
       [18, 4, Math.PI],
       [-18, 4, 0],
-      // The front pair stands wide of the stair mouth, clear of the Grassland board.
+      // The front pair stands wide of the stair mouth.
       [24, 36, Math.PI],
       [-24, 36, 0],
     ] as const) {
       place(lampPost, x, z, spin);
     }
 
-    // Benches: facing the leaderboards on the right, and the Wins Shop on the left.
+    // Benches: facing the leaderboards on the right, and the Food Shop on the left.
     for (const z of [-52, -24, 4]) place(bench, -54, z, -Math.PI / 2);
-    for (const z of [-45, -19]) place(bench, 32, z, Math.PI / 2);
+    for (const z of [-45, -19]) place(bench, 25, z, Math.PI / 2);
 
     // Flower planters either side of spawn.
     for (const [x, z] of [
@@ -168,9 +168,10 @@ export class HubDecor {
     place(flagPole(0xff5f9a), 46, 40, -Math.PI / 2);
     place(flagPole(0x3aa8ff), -48, 40, -Math.PI / 2);
 
-    // Bunting over the stair mouth and across the back of the hub.
+    // Bunting over the stair mouth and across the back of the hub, high enough
+    // to stay above the dining rebirth signs.
     this.bunting(batch, -30, 30, 21, 40, 26);
-    this.bunting(batch, -30, 30, 14, -48, 24);
+    this.bunting(batch, -30, 30, 18, -48, 24);
 
     const { solid, glow } = mergeBatch(batch);
     const solidMaterial = this.track(new MeshLambertMaterial({ vertexColors: true }));

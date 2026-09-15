@@ -1,29 +1,32 @@
-import { Group, Vector3 } from 'three';
+import { Group } from 'three';
 import {
   AIRBORNE,
-  BACKFLIP_ANIM,
-  FLIP_PIVOT_HEIGHT,
+  EAT,
   IDLE,
   JUMP_ANIMATION,
   JUMP_START,
   LANDING,
   LOCOMOTION,
+  SIT,
+  TALL_ANIM,
   TIP_PIVOT_HEIGHT,
   TRANSITIONS,
 } from '../config/animationConfig.js';
 import type { AnimationInput } from './AnimationInput.js';
-import { BackflipAnimator } from './BackflipAnimator.js';
 import { LocomotionCycle } from './LocomotionCycle.js';
 import { PoseBuffer } from './PoseBuffer.js';
+import { BONE_INDEX, type BoneName } from './rig/boneNames.js';
 import type { PlayerRig } from './rig/PlayerRig.js';
 
-/** Negative rotation about the character's right axis takes the head backward. */
-const FLIP_AXIS = new Vector3(1, 0, 0);
-
-export type AnimationState = 'idle' | 'run' | 'jumpStart' | 'airborne' | 'backflip' | 'landing';
+export type AnimationState = 'idle' | 'run' | 'sit' | 'jumpStart' | 'airborne' | 'landing';
 
 /** The states that make up "the jump", played at `JUMP_ANIMATION.playbackRate`. */
-const JUMP_STATES: ReadonlySet<AnimationState> = new Set(['jumpStart', 'airborne', 'backflip', 'landing']);
+const JUMP_STATES: ReadonlySet<AnimationState> = new Set(['jumpStart', 'airborne', 'landing']);
+
+/** States the eating arm is layered over. */
+const EATING_STATES: ReadonlySet<AnimationState> = new Set(['idle', 'run', 'sit']);
+
+const LEG_BONES: readonly BoneName[] = ['LegL1', 'LegR1', 'LegL2', 'LegR2'];
 
 const clamp = (value: number, min: number, max: number): number =>
   value < min ? min : value > max ? max : value;
@@ -31,19 +34,19 @@ const clamp = (value: number, min: number, max: number): number =>
 const ease = (t: number): number => t * t * (3 - 2 * t);
 
 /**
- * The player animation state machine: run, jump, backflip (air jumps) and land.
- * There is no death animation - a fall simply returns the player to spawn.
+ * The player animation state machine: walk, sit and eat, the one jump, and
+ * land. There is no death animation - a fall simply returns the player to
+ * spawn - and no air jump.
  *
- * Writes ONLY to bones (via `PlayerRig`), the flip pivot and the visual bob
+ * Writes ONLY to bones (via `PlayerRig`), the tip pivot and the visual bob
  * node. It never touches the physics root.
  *
  * The jump states run on a scaled clock (`JUMP_ANIMATION.playbackRate`): their
- * timers, cross-fades, flip rotation and rise/fall blend all advance slower,
- * while the physics that moves the player is unchanged.
+ * timers, cross-fades and rise/fall blend all advance slower, while the
+ * physics that moves the player is unchanged.
  */
 export class PlayerAnimator {
   private readonly locomotion = new LocomotionCycle();
-  private readonly backflip = new BackflipAnimator();
 
   private readonly target = new PoseBuffer();
   private readonly from = new PoseBuffer();
@@ -57,16 +60,17 @@ export class PlayerAnimator {
   private wasGrounded = true;
   /** Eased rise (1) / fall (0) weight for the airborne pose. */
   private airWeight = 1;
+  /** Clock of the eating cycle, and how strongly the eating arm is applied. */
+  private eatTime = 0;
+  private eatWeight = 0;
 
   constructor(
     private rig: PlayerRig,
     private readonly tipPivot: Group,
-    private readonly flipPivot: Group,
     private readonly visual: Group,
   ) {
     this.tipPivot.position.y = TIP_PIVOT_HEIGHT;
-    this.flipPivot.position.y = FLIP_PIVOT_HEIGHT - TIP_PIVOT_HEIGHT;
-    this.visual.position.y = -FLIP_PIVOT_HEIGHT;
+    this.visual.position.y = -TIP_PIVOT_HEIGHT;
   }
 
   get currentState(): AnimationState {
@@ -82,59 +86,56 @@ export class PlayerAnimator {
   }
 
   reset(): void {
-    this.backflip.reset();
     this.state = 'idle';
     this.stateTime = 0;
     this.blendDuration = 0;
     this.wasGrounded = true;
     this.airWeight = 1;
+    this.eatWeight = 0;
     this.target.reset();
     this.from.reset();
     this.output.reset();
     this.rig.resetToBindPose();
-    this.flipPivot.quaternion.identity();
     this.tipPivot.quaternion.identity();
-    this.visual.position.y = -FLIP_PIVOT_HEIGHT;
+    this.visual.position.y = -TIP_PIVOT_HEIGHT;
   }
 
   update(delta: number, input: AnimationInput): void {
     const dt = Math.max(0, delta);
     const jumpDt = dt * JUMP_ANIMATION.playbackRate;
     this.stateTime += JUMP_STATES.has(this.state) ? jumpDt : dt;
-    const flipFinished = this.backflip.update(jumpDt);
-    this.resolveState(input, flipFinished);
+    this.resolveState(input);
     this.writePose(dt, jumpDt, input);
+    this.writeEating(dt, input);
+    this.dampLegs(input.legExtra);
     this.apply(JUMP_STATES.has(this.state) ? jumpDt : dt);
   }
 
-  private resolveState(input: AnimationInput, flipFinished: boolean): void {
+  private resolveState(input: AnimationInput): void {
     if (input.landed || (input.grounded && !this.wasGrounded)) {
-      if (this.backflip.isFlipping) this.backflip.abort();
       this.wasGrounded = true;
       this.setState('landing', TRANSITIONS.toLanding);
       return;
     }
     this.wasGrounded = input.grounded;
 
-    if (input.airJumped) {
-      this.backflip.request();
-      this.setState('backflip', TRANSITIONS.toBackflip);
-      return;
-    }
     if (input.jumpStarted) {
       this.airWeight = 1;
       this.setState('jumpStart', TRANSITIONS.toJumpStart);
       return;
     }
-    if (this.backflip.isFlipping) return;
 
     if (!input.grounded) {
-      if (this.state === 'jumpStart' && this.stateTime < JUMP_START.duration && !flipFinished) return;
+      if (this.state === 'jumpStart' && this.stateTime < JUMP_START.duration) return;
       this.setState('airborne', TRANSITIONS.toAirborne);
       return;
     }
 
     if (this.state === 'landing' && this.stateTime < LANDING.duration) return;
+    if (input.seated && input.horizontalSpeed < SIT.maxSpeed) {
+      this.setState('sit', TRANSITIONS.toSit);
+      return;
+    }
     this.setState(
       input.horizontalSpeed < LOCOMOTION.idleSpeed ? 'idle' : 'run',
       TRANSITIONS.toLocomotion,
@@ -142,7 +143,7 @@ export class PlayerAnimator {
   }
 
   private setState(next: AnimationState, duration: number): void {
-    if (next === this.state && next !== 'backflip') return;
+    if (next === this.state) return;
     this.from.copyFrom(this.output);
     this.state = next;
     this.stateTime = 0;
@@ -162,6 +163,15 @@ export class PlayerAnimator {
         this.target.bobY = breath * IDLE.breathBob;
         break;
       }
+      case 'sit': {
+        this.locomotion.settleTowardNeutral(dt);
+        this.idleTime += dt;
+        const breath = Math.sin(this.idleTime * IDLE.breathFrequency * Math.PI * 2);
+        this.target.applyDefinition(SIT.pose);
+        this.target.add('Spine1', breath * IDLE.breathAmount);
+        this.target.bobY = SIT.bobY;
+        break;
+      }
       case 'run':
         this.locomotion.advance(dt, input.horizontalSpeed);
         this.locomotion.writePose(this.target, input.horizontalSpeed);
@@ -179,17 +189,6 @@ export class PlayerAnimator {
         this.target.bobY = LANDING.bobY * depth;
         break;
       }
-      case 'backflip': {
-        const tuck = this.backflip.tuckAmount;
-        this.writeAirborne(jumpDt, input.verticalVelocity);
-        this.target.blendInDefinition(BACKFLIP_ANIM.tuckPose, tuck);
-        const asymmetry = BACKFLIP_ANIM.tuckAsymmetry * tuck;
-        this.target.add('LegL1', asymmetry);
-        this.target.add('LegR1', -asymmetry);
-        this.target.bobY = 0;
-        if (!this.backflip.isFlipping) this.setState('airborne', TRANSITIONS.toAirborne);
-        break;
-      }
     }
   }
 
@@ -205,6 +204,40 @@ export class PlayerAnimator {
     this.target.bobY = 0;
   }
 
+  /** The right hand brings the food up to the mouth, over and over, while eating. */
+  private writeEating(dt: number, input: AnimationInput): void {
+    const active = input.eating && EATING_STATES.has(this.state);
+    this.eatWeight += ((active ? 1 : 0) - this.eatWeight) * (1 - Math.exp(-8 * dt));
+    if (active) this.eatTime += dt;
+    if (this.eatWeight < 0.001) return;
+
+    const phase = (this.eatTime % EAT.period) / EAT.period;
+    const bite = phase < EAT.raise ? Math.sin((phase / EAT.raise) * Math.PI) : 0;
+    const w = this.eatWeight * ease(clamp(bite * 1.25, 0, 1));
+    this.blendBone('ArmR1', EAT.shoulder, 0, EAT.shoulderRoll, w);
+    this.blendBone('ArmR2', EAT.elbow, 0, 0, w);
+    this.target.add('Neck1', EAT.nod * w);
+  }
+
+  /** Long legs swing through a smaller angle. */
+  private dampLegs(legExtra: number): void {
+    if (!(legExtra > 0.01) || this.state === 'sit') return;
+    const damp = 1 / (1 + legExtra * TALL_ANIM.dampPerUnit);
+    const values = this.target.rotations;
+    for (const bone of LEG_BONES) {
+      const at = BONE_INDEX[bone] * 3;
+      for (let i = at; i < at + 3; i += 1) values[i] = (values[i] ?? 0) * damp;
+    }
+  }
+
+  private blendBone(bone: BoneName, x: number, y: number, z: number, weight: number): void {
+    const values = this.target.rotations;
+    const at = BONE_INDEX[bone] * 3;
+    values[at] = (values[at] ?? 0) + (x - (values[at] ?? 0)) * weight;
+    values[at + 1] = (values[at + 1] ?? 0) + (y - (values[at + 1] ?? 0)) * weight;
+    values[at + 2] = (values[at + 2] ?? 0) + (z - (values[at + 2] ?? 0)) * weight;
+  }
+
   private apply(blendDt: number): void {
     if (this.blendDuration > 0) {
       this.blendTime += blendDt;
@@ -216,8 +249,6 @@ export class PlayerAnimator {
     }
 
     this.rig.applyPose(this.output);
-    // Rebuilt from a scalar every frame, so the pivot can never drift.
-    this.flipPivot.quaternion.setFromAxisAngle(FLIP_AXIS, -this.backflip.rotationAngle);
-    this.visual.position.y = -FLIP_PIVOT_HEIGHT + this.output.bobY;
+    this.visual.position.y = -TIP_PIVOT_HEIGHT + this.output.bobY;
   }
 }

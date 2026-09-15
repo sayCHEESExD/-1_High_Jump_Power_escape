@@ -23,7 +23,7 @@
 import { Client } from 'colyseus.js';
 import { MAX_PLAYERS_PER_ROOM, ROOM_NAME } from '../shared/dist/index.js';
 
-const ENDPOINT = process.env.ENDPOINT ?? 'ws://localhost:2570';
+const ENDPOINT = process.env.ENDPOINT ?? 'ws://localhost:2571';
 /** Enough over the line to prove routing, few enough to stay quick. */
 const TOTAL = MAX_PLAYERS_PER_ROOM + 3;
 

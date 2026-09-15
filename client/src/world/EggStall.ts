@@ -1,4 +1,4 @@
-import { EQUIPMENT_STALL, HUB, ITEM_POOL } from '@highjump/shared';
+import { EGGS, EGG_SHOP, HUB } from '@highjump/shared';
 import {
   AdditiveBlending,
   BoxGeometry,
@@ -8,7 +8,7 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshLambertMaterial,
-  OctahedronGeometry,
+  SphereGeometry,
   type BufferGeometry,
   type Material,
 } from 'three';
@@ -19,22 +19,22 @@ import type { WorldTextures } from './WorldTextures.js';
 
 /** Where the shopkeeper stands: on a raised step behind the counter. */
 export const STALL_KEEPER = {
-  x: EQUIPMENT_STALL.x,
-  z: EQUIPMENT_STALL.z + 2.4,
+  x: EGG_SHOP.x,
+  z: EGG_SHOP.z + 2.4,
   platformHeight: 1,
 } as const;
 
 /**
- * The Equipment Shop at the foot of the staircase.
+ * The Egg Shop at the foot of the staircase.
  *
- * A counter with a wooden top, gold trim and glass display cases; a cash
- * register; a back wall of shelves stocked with glowing gems; a striped awning
- * with a scalloped edge and hanging lanterns; crates, barrels, potted plants
- * and lollipops around it; a rug marking where to stand; a chalkboard; and a
- * framed, glowing sign. The shopkeeper stands on the step behind the counter
- * (see `Shopkeeper`). Standing on the rug opens the Item Shop.
+ * A counter with a wooden top, gold trim and glass display cases each holding
+ * an egg; a cash register; a back wall of shelves stocked with the five eggs;
+ * a striped awning with a scalloped edge and hanging lanterns; crates, barrels,
+ * potted plants and lollipops around it; a rug marking where to stand; a
+ * chalkboard; and a framed, glowing sign. The shopkeeper stands on the step
+ * behind the counter (see `Shopkeeper`). Standing on the rug opens the Egg Shop.
  */
-export class EquipmentStall {
+export class EggStall {
   readonly root = new Group();
   private readonly geometries: BufferGeometry[] = [];
   private readonly materials: Material[] = [];
@@ -46,7 +46,7 @@ export class EquipmentStall {
   private time = 0;
 
   constructor(textures: WorldTextures) {
-    const s = EQUIPMENT_STALL;
+    const s = EGG_SHOP;
     const frontZ = s.z - s.depth / 2;
     const counterMat = this.lambert({ map: textures.studs('#f5f7fb', '#d6dde8') });
     const wood = this.lambert({ color: PALETTE.stallWood });
@@ -65,7 +65,7 @@ export class EquipmentStall {
     }
     for (const dx of [-4, 0, 4]) this.add(new BoxGeometry(3.2, 1.3, 0.12), pink, s.x + dx, s.height / 2, frontZ - 0.08);
 
-    // Posts and a back wall with three shelves of glowing gems.
+    // Posts and a back wall with three shelves of eggs.
     for (const dx of [-1, 1]) {
       for (const dz of [-1, 1]) {
         this.add(new BoxGeometry(0.8, 8, 0.8), wood, s.x + dx * (s.width / 2 - 0.4), 4, s.z + dz * (s.depth / 2 + 1));
@@ -73,15 +73,15 @@ export class EquipmentStall {
     }
     const wallZ = s.z + 4.6;
     this.add(new BoxGeometry(s.width + 1.5, 7.5, 0.6), wall, s.x, 3.75, wallZ);
-    const gemGeometry = new OctahedronGeometry(0.4, 0);
-    this.geometries.push(gemGeometry);
-    [3.2, 4.8, 6.4].forEach((y, shelf) => {
+    const eggGeometry = new SphereGeometry(0.4, 12, 10);
+    eggGeometry.scale(1, 1.3, 1);
+    this.geometries.push(eggGeometry);
+    const eggMaterials = EGGS.map((egg) => this.lambert({ color: egg.color, emissive: egg.accent, emissiveIntensity: 0.2 }));
+    [3.2, 4.8, 6.4].forEach((y) => {
       this.add(new BoxGeometry(s.width, 0.25, 1.2), wood, s.x, y, wallZ - 0.65);
-      for (let i = 0; i < 5; i += 1) {
-        const item = ITEM_POOL[(shelf * 5 + i) % ITEM_POOL.length];
-        const colour = item?.color ?? 0xffffff;
-        const gem = new Mesh(gemGeometry, this.lambert({ color: colour, emissive: colour, emissiveIntensity: 0.45 }));
-        gem.position.set(s.x - 4.8 + i * 2.4, y + 0.55, wallZ - 0.65);
+      for (let i = 0; i < EGGS.length; i += 1) {
+        const gem = new Mesh(eggGeometry, eggMaterials[i]);
+        gem.position.set(s.x - 4.8 + i * 2.4, y + 0.65, wallZ - 0.65);
         this.root.add(gem);
         this.gems.push(gem);
       }
@@ -90,13 +90,14 @@ export class EquipmentStall {
     // The shopkeeper's step.
     this.add(new BoxGeometry(6, STALL_KEEPER.platformHeight, 1.8), woodDark, STALL_KEEPER.x, STALL_KEEPER.platformHeight / 2, STALL_KEEPER.z + 0.1);
 
-    // Glass display cases on the counter, each with a turning gem inside.
+    // Glass display cases on the counter, each with a turning egg inside.
     const glass = this.track(new MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.22, depthWrite: false, side: DoubleSide }));
-    const bigGem = new OctahedronGeometry(0.55, 0);
+    const bigGem = new SphereGeometry(0.45, 14, 10);
+    bigGem.scale(1, 1.3, 1);
     this.geometries.push(bigGem);
     [
-      [-4.3, 0x5ce1ff],
-      [4.3, 0xff5fd0],
+      [-4.3, EGGS[1]?.color ?? 0x5ce1ff],
+      [4.3, EGGS[4]?.color ?? 0xff5fd0],
     ].forEach(([dx, colour]) => {
       const x = s.x + (dx as number);
       const top = s.height + 0.3;
@@ -237,15 +238,15 @@ export class EquipmentStall {
     for (const dx of [-1.2, 1.2]) this.add(new BoxGeometry(0.18, 3, 0.18), woodDark, boardX + dx, 1.5, boardZ + 0.2).rotation.x = 0.12;
     this.add(new BoxGeometry(2.9, 2.1, 0.12), this.lambert({ color: 0x1f3a2a }), boardX, 2.2, boardZ);
     this.board = new CanvasSign(2.6, 1.8, [
-      { text: 'NEW ITEMS', size: 1, fill: '#ffe14d', stroke: '#1f3a2a', strokeWidth: 0.1 },
-      { text: 'every 5 min!', size: 0.8, fill: '#ffffff', stroke: '#1f3a2a', strokeWidth: 0.1 },
+      { text: 'HATCH PETS', size: 1, fill: '#ffe14d', stroke: '#1f3a2a', strokeWidth: 0.1 },
+      { text: '5 eggs inside!', size: 0.8, fill: '#ffffff', stroke: '#1f3a2a', strokeWidth: 0.1 },
     ]);
     this.board.mesh.position.set(boardX, 2.2, boardZ - 0.08);
     this.board.mesh.rotation.y = Math.PI;
     this.root.add(this.board.mesh);
 
     // The framed, glowing sign.
-    this.sign = new FramedSign(24, 6.5, 'Equipment Shop', '/ui/shop.png', SIGN_THEMES.cyan);
+    this.sign = new FramedSign(24, 6.5, 'Egg Shop', '/ui/shop.png', SIGN_THEMES.cyan);
     this.sign.root.position.set(s.x, 12.4, s.z - 2);
     this.sign.root.rotation.y = Math.PI;
     this.root.add(this.sign.root);

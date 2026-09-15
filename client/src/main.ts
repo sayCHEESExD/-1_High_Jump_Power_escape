@@ -46,7 +46,7 @@ const main = async (): Promise<void> => {
   startPortal();
 
   if (clientConfig.debug) {
-    (window as Window & { __highjump?: { game: Game; loop: GameLoop } }).__highjump = { game, loop };
+    (window as Window & { __tallescape?: { game: Game; loop: GameLoop } }).__tallescape = { game, loop };
   }
   if (boot && online) boot.hidden = true;
   logger.info(SCOPE, 'running');
@@ -59,7 +59,7 @@ const showOfflineNotice = (error: unknown): void => {
     bootStatus.className = 'err';
     bootStatus.textContent = clientConfig.serverUrl
       ? `Not connected to the game server (${clientConfig.serverUrl}).\n` +
-        'Playing offline: energy, levels, Wins and shops are server-owned and will not progress.'
+        'Playing offline: food, levels, Wins, pets and shops are server-owned and will not progress.'
       : 'This build has no game server configured (VITE_SERVER_URL was not set when it was built).';
   }
   boot?.classList.add('notice');

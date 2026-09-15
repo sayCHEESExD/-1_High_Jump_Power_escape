@@ -1,13 +1,14 @@
 import {
   MOVEMENT,
-  TRAINING,
   WorldCollision,
   createMotion,
   createSimEvents,
+  diningRate,
   horizontalSpeed,
+  canJumpAt,
+  isPastTallLine,
   resetMotion,
   stepPlayer,
-  treadmillRate,
   type MoveMessage,
   type MovementInput,
   type PlayerMotion,
@@ -33,6 +34,8 @@ const MIN_IMPACT_SPEED = 10;
 /** Touchdown speed, as a multiple of jump velocity, that counts as a full-strength impact. */
 const IMPACT_FULL_FACTOR = 1.25;
 const CORRECTION_RATE = 14;
+/** Horizontal speed above which a player holding food is eating as they walk. */
+const EATING_SPEED = 1;
 
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 const EMPTY_INPUTS: MoveMessage[] = [];
@@ -56,8 +59,6 @@ export interface AuthoritativeMotion {
   velocityZ: number;
   grounded: boolean;
   jumpCount: number;
-  flipCount: number;
-  jumpsUsed: number;
   lastInputSeq: number;
   jumpLatched: boolean;
   coyote: number;
@@ -70,7 +71,7 @@ export interface AuthoritativeMotion {
  * server update snaps to the authoritative motion and replays the rest. Nothing
  * here sends a transform - only the input that produced this frame.
  *
- * There is no death and no fall penalty: a missed jump lands in the pit under
+ * There is no death and no fall penalty: a missed step lands in the pit under
  * the gap. Only a player a glitch leaves outside the world is placed at spawn.
  */
 export class LocalPlayer {
@@ -82,7 +83,8 @@ export class LocalPlayer {
   private readonly motion: PlayerMotion = createMotion();
   private readonly events = createSimEvents();
   private readonly replayEvents = createSimEvents();
-  private readonly params: SimParams = { jumpVelocity: 40, gravity: 100, maxJumps: 1 };
+  /** `legReach` in here is how long the legs are drawn, which pads they reach, and where the body meets the stair faces. */
+  private readonly params: SimParams = { jumpVelocity: 40, gravity: 100, legReach: 8 };
   private rebirths = 0;
 
   private readonly pending: PendingInput[] = [];
@@ -128,35 +130,57 @@ export class LocalPlayer {
   /**
    * How hard the player hit the ground this frame, 0..1, or 0 when there was
    * no real landing. Measured against the player's OWN jump speed, so a full
-   * jump lands hard at every level and a hop off a small ledge barely registers.
+   * jump lands hard and a hop off a small ledge barely registers.
    */
   get landingImpact(): number {
     return this.impact;
   }
-  /** Which jump, if any, started this frame - an air jump is a backflip. */
-  get jumpKind(): 'none' | 'ground' | 'air' {
-    return this.events.airJumped ? 'air' : this.events.jumpStarted ? 'ground' : 'none';
+  /** True on the frame the (one) jump started. */
+  get jumped(): boolean {
+    return this.events.jumpStarted;
   }
   get maxRunSpeed(): number {
     return MOVEMENT.moveSpeed;
   }
-  get jumpsLeft(): number {
-    return this.motion.grounded ? this.params.maxJumps : Math.max(0, this.params.maxJumps - this.motion.jumpsUsed);
+  /** Jumping only works in the spawn area. */
+  get canJump(): boolean {
+    return canJumpAt(this.motion.z);
   }
-  /** On a belt this player has unlocked, so the animation should run. */
-  get onActiveTreadmill(): boolean {
-    return this.motion.treadmill > 0 && treadmillRate(this.motion.treadmill, this.rebirths) > 0;
+  /** Seated at a dining table this player has unlocked. */
+  get atActiveTable(): boolean {
+    return this.motion.dining > 0 && diningRate(this.motion.dining, this.rebirths) > 0;
+  }
+  /** Eating from the held food: walking with it, or seated at a table. */
+  get isEating(): boolean {
+    return this.motion.grounded && (this.atActiveTable || this.horizontalSpeed > EATING_SPEED);
+  }
+  /** Extra leg length being drawn, in world units. */
+  get legExtra(): number {
+    return this.character.currentLegExtra;
+  }
+  /** The server-derived leg reach, for win pads. */
+  get legReach(): number {
+    return this.params.legReach;
+  }
+  /** Simulated Z, for the tall line. */
+  get simZ(): number {
+    return this.motion.z;
   }
   /** True while waiting for the server to bring a fallen player back to spawn. */
   get isReturning(): boolean {
     return this.returning;
   }
 
-  /** The server-resolved jump physics this player simulates with. */
-  setProgression(jumpVelocity: number, gravity: number, maxJumps: number, rebirths: number): void {
+  /** The server-resolved progression this player simulates with. */
+  setProgression(
+    jumpVelocity: number,
+    gravity: number,
+    rebirths: number,
+    legReach: number,
+  ): void {
     if (Number.isFinite(jumpVelocity) && jumpVelocity > 0) this.params.jumpVelocity = jumpVelocity;
     if (Number.isFinite(gravity) && gravity > 0) this.params.gravity = gravity;
-    if (Number.isFinite(maxJumps) && maxJumps >= 1) this.params.maxJumps = maxJumps;
+    if (Number.isFinite(legReach) && legReach > 0) this.params.legReach = legReach;
     this.rebirths = rebirths;
   }
 
@@ -203,6 +227,8 @@ export class LocalPlayer {
     this.arriveTime = 0;
     this.character.resetAnimation();
     this.character.setVisualScale(0.15, 0.15, 0.15);
+    this.character.setLegTarget(isPastTallLine(x, z) ? this.params.legReach : 0);
+    this.character.snapLegs();
     this.syncFromMotion();
   }
 
@@ -222,8 +248,6 @@ export class LocalPlayer {
     this.motion.yaw = state.rotationY;
     this.motion.grounded = state.grounded;
     this.motion.jumpCount = state.jumpCount;
-    this.motion.flipCount = state.flipCount;
-    this.motion.jumpsUsed = state.jumpsUsed;
     this.motion.jumpLatched = state.jumpLatched;
     this.motion.coyote = state.coyote;
 
@@ -258,7 +282,6 @@ export class LocalPlayer {
     this.accumulator += Math.max(0, delta);
     let steps = 0;
     let jumpStarted = false;
-    let airJumped = false;
     let landed = false;
     let impactSpeed = 0;
 
@@ -280,7 +303,6 @@ export class LocalPlayer {
       const fallSpeed = -this.motion.vy;
       stepPlayer(this.motion, movement, this.params, FIXED_DT, this.collision, this.events);
       jumpStarted = jumpStarted || this.events.jumpStarted;
-      airJumped = airJumped || this.events.airJumped;
       landed = landed || this.events.landed;
       // The speed the player was falling at on the step they touched down -
       // read, never written, so the physics is untouched.
@@ -293,7 +315,6 @@ export class LocalPlayer {
     if (this.accumulator > FIXED_DT * MAX_STEPS_PER_FRAME) this.accumulator = 0;
 
     this.events.jumpStarted = jumpStarted;
-    this.events.airJumped = airJumped;
     this.events.landed = landed;
     this.impact =
       landed && impactSpeed >= MIN_IMPACT_SPEED
@@ -343,12 +364,17 @@ export class LocalPlayer {
 
   private updateAnimation(delta: number): void {
     const input = this.animationInput;
+    const seated = this.atActiveTable;
     input.grounded = this.motion.grounded;
-    input.horizontalSpeed = this.onActiveTreadmill ? TRAINING.beltSpeed : this.horizontalSpeed;
+    input.horizontalSpeed = this.horizontalSpeed;
     input.verticalVelocity = this.motion.vy;
     input.jumpStarted = this.events.jumpStarted;
-    input.airJumped = this.events.airJumped;
     input.landed = this.events.landed;
+    input.seated = seated;
+    input.eating = this.isEating;
+    // The feet stay on the floor; the legs lift the body to the reach past the
+    // tall line - the same height the simulation stops the body at stair faces.
+    this.character.setLegTarget(isPastTallLine(this.motion.x, this.motion.z) ? this.params.legReach : 0);
     this.character.update(delta, input);
     this.character.updateEffects(delta, input.horizontalSpeed);
   }

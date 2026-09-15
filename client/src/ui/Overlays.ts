@@ -9,8 +9,9 @@ export class KeyHints {
     this.root = document.createElement('div');
     this.root.className = 'hj-keys hj-font';
     const hints: [string, string][] = [
-      ['WASD', 'Move'],
-      ['Space', 'Jump (again in air: backflip)'],
+      ['WASD', 'Walk (and eat)'],
+      ['Space', 'Jump (spawn area only)'],
+      ['P', 'Pets'],
       ['Wheel', 'Zoom'],
       ['Esc', 'Free cursor'],
     ];

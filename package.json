@@ -1,8 +1,8 @@
 {
-  "name": "high-jump-power-escape",
+  "name": "tall-escape",
   "version": "0.1.0",
   "private": true,
-  "description": "+1 High Jump Power Escape - browser multiplayer staircase obby (Three.js + Colyseus)",
+  "description": "+1 Tall Escape - browser multiplayer tall-legs staircase obby (Three.js + Colyseus)",
   "type": "module",
   "engines": {
     "node": ">=20.11.0"

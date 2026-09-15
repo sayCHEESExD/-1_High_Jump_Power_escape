@@ -1,10 +1,13 @@
-# +1 High Jump Power Escape
+# +1 Tall Escape
 
-A browser multiplayer staircase obby in the +1 Escape series. Run and jump to farm
-energy, spend it on levels that raise your jump height, and climb 14 biomes of a
-giant staircase into the sky. Bank Wins at each biome's pad, then spend them on
-spring boots, trails, auras and equipment. Rebirth for extra jumps (air jumps are
-backflips).
+A browser multiplayer staircase obby in the +1 Escape series. Walk around holding
+food to eat it, spend the food on levels, and grow taller: every level raises your
+**height** and the length of your legs. Cross the tall line at the foot of the
+staircase and your legs stretch to walk straight up the 14 biomes of Steps to
+Heaven - as far as your level allows (step 1 needs level 5, then 25, 50, 75 ...).
+Every step has its own win pad. Spend Wins on better food, trails and pet eggs,
+sit at the dining tables to eat on the spot, and rebirth for taller legs and
+better tables.
 
 Three.js + TypeScript + Vite on the client, Colyseus + Node on the server, and a
 framework-free `shared/` package both sides simulate with. Gameplay is
@@ -20,8 +23,8 @@ npm install
 npm run dev
 ```
 
-The client is on http://localhost:5176 and the server on ws://localhost:2570
-(the previous games in the series use 5173-5175 and 2567-2569).
+The client is on http://localhost:5177 and the server on ws://localhost:2571
+(the previous games in the series use 5173-5176 and 2567-2570).
 
 ## Checks
 
@@ -33,12 +36,13 @@ npm run typecheck
 npm run verify
 ```
 
-`verify` runs four suites: `verify:assets` (every runtime asset exists),
-`verify:course` (biome table, layout sides, win pads, and a real simulation that
-every step is reachable with enough height and NOT with too little),
-`verify:progression` (height curve, rebirth jumps, every price in the spec), and
-`verify:services` (the server's win, boot, cosmetic, equipment, energy and rebirth
-decisions, including rejection paths).
+`verify` runs five suites: `verify:assets` (every runtime asset exists),
+`verify:course` (biome table, layout sides, a win pad on every step, the tall line,
+and a real simulation that every step is climbable on tall legs at exactly its
+level and NOT one level below), `verify:progression` (height and food curves,
+foods, dining tables, eggs, pet chances and bonuses, rebirth), `verify:services`
+(the server's win, food shop, trail, hatching, pet inventory, food and rebirth
+decisions, including rejection paths), and `verify:bloxity` (the Bux webhook).
 
 ```bash
 npm run build:client
@@ -60,10 +64,13 @@ rooms close.
 
 | Action | Desktop | Touch |
 | --- | --- | --- |
-| Move | WASD / arrows (mouse aims the camera) | left stick |
+| Walk (and eat) | WASD / arrows (mouse aims the camera) | left stick |
 | Zoom | mouse wheel (up = in, down = out) | - |
-| Jump / air backflip | Space | jump button |
-| Rebirth / Trail / Aura / Backpack / Mute | R / T / Y / B / M | left rail tiles |
+| Jump (spawn area only) | Space | jump button |
+| Rebirth / Trail / Pets / Mute | R / T / P / M | left rail tiles |
+| Buy food | walk onto its pedestal with the Wins | same |
+| Hatch eggs | walk up to the Egg Shop | same |
+| Eat at a table | stand on a dining chair | same |
 | Free the cursor | Esc | - |
 
 ## Tuning
@@ -72,21 +79,22 @@ Every gameplay number lives in `shared/src/config/`:
 
 | File | What it holds |
 | --- | --- |
-| `course.ts` | `BIOMES` (steps, rise, depth, width, gap, wins per biome) and the hub layout |
-| `progression.ts` | energy per step, level cost curve, height per level |
-| `rebirth.ts` | energy cost multiplier, jumps per rebirth, rebirth level requirement |
-| `movement.ts` | run speed, air control, how jump height becomes velocity and gravity |
-| `boots.ts` | the 10 Win Shop boots |
-| `trails.ts` / `auras.ts` | the cosmetic ladders and their multipliers |
-| `treadmills.ts` | High Training tiers and belt layout |
-| `equipment.ts` | the item pool, rarities, restock period, backpack limits |
+| `course.ts` | `BIOMES` (steps, rise, depth, width, gap), step level requirements, `STEP_WINS`, the tall line and the hub layout |
+| `progression.ts` | food per step, level cost curve, height per level, leg reach per level, jump height |
+| `rebirth.ts` | height and food cost multipliers, rebirth level requirement |
+| `foodRate.ts` | THE food per step: food x trail x pets (no level/rebirth factor) |
+| `movement.ts` | walk speed, air control, how jump height becomes velocity and gravity |
+| `foods.ts` | the 15 Food Shop foods |
+| `trails.ts` | the trail ladder and its food multipliers |
+| `dining.ts` | the four dining tables (Height Power, rebirths) and their layout |
+| `pets.ts` | eggs, the pets in each, chances, bonuses and inventory limits |
 
 ## Deploy
 
 The same split as the previous games: the client is static files, the server is a
 long-lived Node process.
 
-- **Server:** `Dockerfile` at the repo root. Set `PORT` (defaults to 2570) and mount
+- **Server:** `Dockerfile` at the repo root. Set `PORT` (defaults to 2571) and mount
   a volume at `HIGHJUMP_DATA_DIR` (default `/data`) or a redeploy wipes profiles.
   `/health` reports rooms and players.
 - **Client:** `npm run build:client` and publish `client/dist` (`netlify.toml` is
@@ -94,24 +102,24 @@ long-lived Node process.
 
 ### Bloxity Hosting (GitHub Actions)
 
-`.github/workflows/deploy.yml` deploys game id `high-jump-power-escape` on every push,
+`.github/workflows/deploy.yml` deploys game id `tall-escape` on every push,
 following [hosting.bloxity.io/docs](https://hosting.bloxity.io/docs):
 
 | Branch | Channel | Backend (Colyseus) | Frontend |
 | --- | --- | --- | --- |
-| `dev` | `dev` | `wss://high-jump-power-escape.dev.host.bloxity.io` | `https://high-jump-power-escape.dev.play.bloxity.io` |
-| `main` | `prod` | `wss://high-jump-power-escape.host.bloxity.io` | `https://high-jump-power-escape.play.bloxity.io` |
+| `dev` | `dev` | `wss://tall-escape.dev.host.bloxity.io` | `https://tall-escape.dev.play.bloxity.io` |
+| `main` | `prod` | `wss://tall-escape.host.bloxity.io` | `https://tall-escape.play.bloxity.io` |
 
 1. Typecheck and verify.
-2. Build the server image, push `ghcr.io/<owner>/high-jump-power-escape-server:<channel>-<sha>`,
-   and roll it with `POST https://legion.bloxity.io/v1/apps/high-jump-power-escape/deploy`
+2. Build the server image, push `ghcr.io/<owner>/tall-escape-server:<channel>-<sha>`,
+   and roll it with `POST https://legion.bloxity.io/v1/apps/tall-escape/deploy`
    (`version` = commit SHA, `seatCap` 15 = the room cap).
 3. Build the client with that channel's `VITE_SERVER_URL`, zip `client/dist` with
    `index.html` at the root, and upload the raw zip to
-   `POST https://api.bloxity.io/v1/hosting/games/high-jump-power-escape/frontend?channel=<channel>&version=<sha>`.
+   `POST https://api.bloxity.io/v1/hosting/games/tall-escape/frontend?channel=<channel>&version=<sha>`.
 
 The only secret is `LEGION_DEPLOY_TOKEN`. After the first push, make the GHCR package
-public so Legion can pull it.
+public so Legion can pull it. The `tall-escape` game id must exist on Bloxity first.
 
 ### Bloxity SDK
 

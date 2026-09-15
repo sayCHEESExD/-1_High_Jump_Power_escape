@@ -21,7 +21,7 @@ import { PlayerRig } from '../animation/rig/PlayerRig.js';
 import { IDLE } from '../config/animationConfig.js';
 import { playerModelLoader } from '../player/PlayerModelLoader.js';
 import { CanvasSign } from './CanvasSign.js';
-import { STALL_KEEPER } from './EquipmentStall.js';
+import { STALL_KEEPER } from './EggStall.js';
 
 /** Seconds between waves, and how long a wave lasts. */
 const WAVE_PERIOD = 6;
@@ -98,7 +98,7 @@ interface Bounds {
 }
 
 /**
- * Mia, the shopkeeper behind the Equipment Shop counter.
+ * Mia, the shopkeeper behind the Egg Shop counter.
  *
  * The same blocky character as the player - a clone of `player.fbx` - in a
  * pink outfit (the player's own texture, recoloured), with long blonde hair, a

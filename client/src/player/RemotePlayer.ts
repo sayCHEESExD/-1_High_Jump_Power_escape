@@ -1,10 +1,14 @@
-import { TRAINING, bestOwnedBoot, treadmillRate } from '@highjump/shared';
+import { bestOwnedFood, diningRate, isPastTallLine } from '@highjump/shared';
 import { createAnimationInput, type AnimationInput } from '../animation/AnimationInput.js';
 import type { NetPlayerState } from '../net/netTypes.js';
 import { PlayerCharacter } from './PlayerCharacter.js';
 
 const FOLLOW_RATE = 14;
+/** A tall step up is followed a little more slowly, so the body rises onto it. */
+const FOLLOW_RATE_Y = 9;
+/** Horizontal distance past which a remote is placed rather than walked. */
 const SNAP_DISTANCE = 16;
+const EATING_SPEED = 1;
 
 const shortestAngle = (from: number, to: number): number => {
   let diff = to - from;
@@ -18,7 +22,9 @@ const shortestAngle = (from: number, to: number): number => {
  *
  * Animation is reconstructed by the same animator the local player runs. One-shot
  * edges are DERIVED from monotonic counters against a baseline taken on first
- * sight, so a stranger's lifetime of jumps is never replayed on join.
+ * sight, so a stranger's lifetime of jumps is never replayed on join. Their
+ * legs, held food and pets are derived from replicated level, position, foods
+ * and pets.
  *
  * Remotes are ghosted: they never collide with anyone.
  */
@@ -32,16 +38,15 @@ export class RemotePlayer {
   private readonly input: AnimationInput = createAnimationInput();
 
   private lastJumpCount: number;
-  private lastFlipCount: number;
   private wasGrounded = true;
   private placed = false;
 
   constructor(state: NetPlayerState) {
     this.lastJumpCount = state.jumpCount;
-    this.lastFlipCount = state.flipCount;
     this.apply(state);
     this.character.setPosition(this.targetX, this.targetY, this.targetZ);
     this.character.setYaw(this.targetYaw);
+    this.character.snapLegs();
     this.placed = true;
   }
 
@@ -51,39 +56,42 @@ export class RemotePlayer {
     this.targetZ = state.z;
     this.targetYaw = state.rotationY;
 
-    const running = state.treadmill > 0 && treadmillRate(state.treadmill, state.rebirths) > 0;
+    const seated = state.dining > 0 && diningRate(state.dining, state.rebirths) > 0;
     this.input.grounded = state.grounded;
-    this.input.horizontalSpeed = running ? TRAINING.beltSpeed : state.speed;
+    this.input.horizontalSpeed = state.speed;
     this.input.verticalVelocity = state.verticalVelocity;
+    this.input.seated = seated;
+    this.input.eating = state.grounded && (seated || state.speed > EATING_SPEED);
 
-    const flips = state.flipCount - this.lastFlipCount;
-    const jumps = state.jumpCount - this.lastJumpCount - Math.max(0, flips);
-    if (flips > 0) this.input.airJumped = true;
-    if (jumps > 0) this.input.jumpStarted = true;
-    this.lastFlipCount = state.flipCount;
+    if (state.jumpCount > this.lastJumpCount) this.input.jumpStarted = true;
     this.lastJumpCount = state.jumpCount;
 
     if (!this.wasGrounded && state.grounded) this.input.landed = true;
     this.wasGrounded = state.grounded;
 
-    this.character.setCosmetics(state.trailSlot, state.auraSlot);
-    this.character.setBoots(bestOwnedBoot(state.ownedBoots)?.slot ?? 0);
+    this.character.setCosmetics(state.trailSlot);
+    this.character.setFood(bestOwnedFood(state.ownedFoods).slot);
+    this.character.setPets(state.pets);
+    this.character.setLegTarget(isPastTallLine(state.x, state.z) ? state.legReach : 0);
   }
 
   update(delta: number): void {
     const dt = Math.max(0, delta);
     const position = this.character.root.position;
-    const gap = Math.hypot(this.targetX - position.x, this.targetY - position.y, this.targetZ - position.z);
+    const gap = Math.hypot(this.targetX - position.x, this.targetZ - position.z);
 
     if (!this.placed || gap > SNAP_DISTANCE) {
       position.set(this.targetX, this.targetY, this.targetZ);
       this.character.setYaw(this.targetYaw);
-      if (gap > SNAP_DISTANCE) this.character.trail.clear();
+      if (gap > SNAP_DISTANCE) {
+        this.character.trail.clear();
+        this.character.snapLegs();
+      }
       this.placed = true;
     } else {
       const alpha = 1 - Math.exp(-FOLLOW_RATE * dt);
       position.x += (this.targetX - position.x) * alpha;
-      position.y += (this.targetY - position.y) * alpha;
+      position.y += (this.targetY - position.y) * (1 - Math.exp(-FOLLOW_RATE_Y * dt));
       position.z += (this.targetZ - position.z) * alpha;
       const yaw = this.character.root.rotation.y;
       this.character.setYaw(yaw + shortestAngle(yaw, this.targetYaw) * alpha);
@@ -92,7 +100,6 @@ export class RemotePlayer {
     this.character.update(dt, this.input);
     this.character.updateEffects(dt, this.input.horizontalSpeed);
     this.input.jumpStarted = false;
-    this.input.airJumped = false;
     this.input.landed = false;
   }
 

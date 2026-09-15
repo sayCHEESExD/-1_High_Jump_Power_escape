@@ -1,8 +1,8 @@
 /**
- * Trails: bought with Wins, one worn at a time, and each MULTIPLIES ENERGY
- * gained per step (the lightning figure on the trail menu).
+ * Trails: bought with Wins, one worn at a time, and each MULTIPLIES FOOD
+ * gained per step (the food figure on the trail menu).
  *
- * Applied in exactly one place - the energy rate in `resolveEnergyRate` - and
+ * Applied in exactly one place - the food rate in `FoodService.rate` - and
  * never to wins, height or movement. Pure data: edit a row to re-price.
  */
 export type TrailStyle = 'solid' | 'rainbow' | 'hacker' | 'heaven' | 'cosmic' | 'music' | 'void';
@@ -11,7 +11,7 @@ export interface TrailTier {
   readonly slot: number;
   readonly name: string;
   readonly cost: number;
-  /** Energy multiplier while worn. */
+  /** Food multiplier while worn. */
   readonly multiplier: number;
   readonly color: number;
   readonly style: TrailStyle;
@@ -41,7 +41,7 @@ export const trailMask = (slot: number): number => 1 << (Math.floor(slot) - 1);
 export const isTrailOwned = (owned: number, slot: number): boolean =>
   slot >= 1 && slot <= 16 && (owned & trailMask(slot)) !== 0;
 
-/** Energy multiplier from the equipped trail; 1 for none or an unowned slot. */
+/** Food multiplier from the equipped trail; 1 for none or an unowned slot. */
 export const trailMultiplier = (slot: number, owned: number): number => {
   const tier = trailBySlot(slot);
   return tier && isTrailOwned(owned, tier.slot) ? tier.multiplier : 1;

@@ -5,6 +5,7 @@ import {
   type ClaimWinMessage,
   type IndexMessage,
   type MoveMessage,
+  type PetHatchedMessage,
   type RespawnMessage,
   type SlotMessage,
   type WinAwardedMessage,
@@ -21,7 +22,7 @@ import type {
 } from './netTypes.js';
 
 const SCOPE = 'NetworkClient';
-const PLAYER_ID_KEY = 'highjumpescape.playerId';
+const PLAYER_ID_KEY = 'tallescape.playerId';
 
 /**
  * Backoff between join attempts. A cold managed host takes a while to wake, and
@@ -52,6 +53,7 @@ export interface NetworkHandlers {
   onPlayerRemoved?(sessionId: string): void;
   onRespawn?(message: RespawnMessage): void;
   onWinAwarded?(message: WinAwardedMessage): void;
+  onPetHatched?(message: PetHatchedMessage): void;
 }
 
 /**
@@ -89,14 +91,6 @@ export class NetworkClient {
 
   get sessionId(): string | null {
     return this.room?.sessionId ?? null;
-  }
-
-  get shopSlot(): number {
-    return this.room?.state?.shopSlot ?? 0;
-  }
-
-  get shopRemaining(): number {
-    return this.room?.state?.shopRemaining ?? 0;
   }
 
   async connect(): Promise<void> {
@@ -144,8 +138,8 @@ export class NetworkClient {
     this.room?.send(MessageType.Move, message);
   }
 
-  claimWin(biome: number): void {
-    const message: ClaimWinMessage = { biome };
+  claimWin(step: number): void {
+    const message: ClaimWinMessage = { step };
     this.room?.send(MessageType.ClaimWin, message);
   }
 
@@ -167,8 +161,9 @@ export class NetworkClient {
     this.room?.send(type, message);
   }
 
-  equipBest(): void {
-    this.room?.send(MessageType.EquipBest, {});
+  /** A request that carries nothing: Equip All, Equip Best. */
+  sendEmpty(type: MessageType): void {
+    this.room?.send(type, {});
   }
 
   /** The boards, COPIED out of the schema so a renderer never holds a live reference. */
@@ -183,7 +178,7 @@ export class NetworkClient {
       }
       return out;
     };
-    return { time: copy(board.time), wins: copy(board.wins), level: copy(board.level) };
+    return { wins: copy(board.wins), height: copy(board.height), time: copy(board.time) };
   }
 
   async disconnect(): Promise<void> {
@@ -203,6 +198,7 @@ export class NetworkClient {
     room.onMessage<WinAwardedMessage>(MessageType.WinAwarded, (message) =>
       this.handlers.onWinAwarded?.(message),
     );
+    room.onMessage<PetHatchedMessage>(MessageType.PetHatched, (message) => this.handlers.onPetHatched?.(message));
     room.onError((code, message) => {
       logger.error(SCOPE, `room error ${code}: ${message ?? ''}`);
       this.handlers.onStatusChange?.('error', message);

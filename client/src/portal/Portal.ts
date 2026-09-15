@@ -32,7 +32,7 @@ export const startPortal = (): void => {
   if (isEmbedded()) {
     for (const origin of allowedOrigins) {
       try {
-        window.parent.postMessage({ type: 'game-ready', game: 'high-jump-power-escape' }, origin);
+        window.parent.postMessage({ type: 'game-ready', game: 'tall-escape' }, origin);
       } catch {
         /* the parent is another origin; nothing to do */
       }

@@ -8,15 +8,15 @@ export class LeaderEntry extends Schema {
 }
 
 /**
- * The three boards in the hub: Time, Wins, Level.
+ * The three boards in the hub: Most Wins, Most Height, Most Time.
  *
  * FIXED-LENGTH arrays written in place, so a rebuild sends only the rows that
  * actually moved.
  */
 export class LeaderboardState extends Schema {
-  @type([LeaderEntry]) time = rows();
   @type([LeaderEntry]) wins = rows();
-  @type([LeaderEntry]) level = rows();
+  @type([LeaderEntry]) height = rows();
+  @type([LeaderEntry]) time = rows();
 }
 
 const rows = (): ArraySchema<LeaderEntry> => {
@@ -28,8 +28,4 @@ const rows = (): ArraySchema<LeaderEntry> => {
 export class GameState extends Schema {
   @type({ map: PlayerState }) players = new MapSchema<PlayerState>();
   @type(LeaderboardState) leaderboard = new LeaderboardState();
-  /** Current equipment restock slot. The shelf is a pure function of it. */
-  @type('uint32') shopSlot = 0;
-  /** Whole seconds until the next restock. */
-  @type('uint16') shopRemaining = 0;
 }

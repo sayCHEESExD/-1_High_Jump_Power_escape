@@ -22,32 +22,26 @@ export interface NetPlayerState {
   lastInputSeq: number;
   jumpLatched: boolean;
   coyote: number;
-  jumpsUsed: number;
   jumpCount: number;
-  flipCount: number;
-  treadmill: number;
+  dining: number;
 
   level: number;
-  energy: number;
-  lifetimeEnergy: number;
+  food: number;
+  lifetimeFood: number;
   rebirths: number;
   wins: number;
   playSeconds: number;
 
   height: number;
+  legReach: number;
   jumpVelocity: number;
   gravity: number;
-  maxJumps: number;
-  energyPerStep: number;
+  foodPerStep: number;
 
-  ownedBoots: number;
+  ownedFoods: number;
   ownedTrails: number;
   trailSlot: number;
-  ownedAuras: number;
-  auraSlot: number;
-  equipment: string;
-  shopBoughtSlot: number;
-  shopBoughtMask: number;
+  pets: string;
 
   ready: boolean;
 }
@@ -58,22 +52,20 @@ export interface NetLeaderEntry {
 }
 
 export interface NetLeaderboardState {
-  time: ArrayLike<NetLeaderEntry>;
   wins: ArrayLike<NetLeaderEntry>;
-  level: ArrayLike<NetLeaderEntry>;
+  height: ArrayLike<NetLeaderEntry>;
+  time: ArrayLike<NetLeaderEntry>;
 }
 
 export interface NetGameState {
   players: MapSchema<NetPlayerState>;
   leaderboard: NetLeaderboardState;
-  shopSlot: number;
-  shopRemaining: number;
 }
 
 export interface LeaderboardSnapshot {
-  time: readonly NetLeaderEntry[];
   wins: readonly NetLeaderEntry[];
-  level: readonly NetLeaderEntry[];
+  height: readonly NetLeaderEntry[];
+  time: readonly NetLeaderEntry[];
 }
 
 export type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error';

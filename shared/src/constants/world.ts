@@ -16,6 +16,15 @@ export const PLAYER_HEIGHT = 3.2;
 /** Height of the collision body, feet to crown. */
 export const BODY_HEIGHT = PLAYER_HEIGHT;
 
+/**
+ * How close the player's position may come to a BOUNDARY wall (the hub's walls,
+ * the staircase's side walls and its far end). Wider than `BODY_RADIUS`: it is
+ * the half-width of the whole drawn player - body, arms and the long legs with
+ * their shoes - so no part of the model ever passes into a boundary wall, at
+ * any leg length.
+ */
+export const WALL_CLEARANCE = 1.4;
+
 /** Horizontal half-width of the collision body. */
 export const BODY_RADIUS = 0.72;
 
@@ -33,8 +42,8 @@ export const SPAWN_ROTATION_Y = 0;
 /**
  * Below this a player is outside the world altogether.
  *
- * NOT a fall mechanic: every gap has a floor (see `PITS`), the sides are
- * clamped, and missing a jump never moves anyone. This is only a safety net
+ * NOT a fall mechanic: the floor is continuous under the whole world and the
+ * sides are clamped. This is only a safety net
  * against a glitch leaving a player falling forever, and normal play cannot
  * reach it.
  */

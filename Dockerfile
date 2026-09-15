@@ -3,8 +3,8 @@
 # Built from the REPOSITORY ROOT: this is an npm workspaces monorepo and the
 # server imports `@highjump/shared` as a workspace dependency.
 #
-#   docker build -t highjump-server .
-#   docker run -e PORT=2570 -p 2570:2570 highjump-server
+#   docker build -t tallescape-server .
+#   docker run -e PORT=2571 -p 2571:2571 tallescape-server
 
 # ---------------------------------------------------------------- build ----
 FROM node:20-alpine AS build
@@ -26,7 +26,7 @@ RUN npm prune --omit=dev
 FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-# 0.0.0.0 inside a container; PORT is left to the host (falls back to 2570).
+# 0.0.0.0 inside a container; PORT is left to the host (falls back to 2571).
 ENV HOST=0.0.0.0
 
 COPY --from=build /app/node_modules ./node_modules
@@ -42,9 +42,9 @@ VOLUME ["/data"]
 RUN mkdir -p /data && chown -R node:node /data
 USER node
 
-EXPOSE 2570
+EXPOSE 2571
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||2570)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||2571)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 # Straight to node: npm swallows SIGTERM, which flushes player profiles.
 CMD ["node", "server/dist/index.js"]

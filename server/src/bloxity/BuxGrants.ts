@@ -10,7 +10,7 @@ const SCOPE = 'bux';
  * The PRICE is not here and never may be: Bloxity charges from its own
  * catalogue keyed by the game slug. This is only the game's half - what a
  * bought SKU is worth in-game. The SKUs must match the products created for
- * `high-jump-power-escape` on bloxity.io.
+ * `tall-escape` on bloxity.io.
  */
 export const SKU_WINS: Readonly<Record<string, number>> = {
   wins_small: 500,

@@ -16,7 +16,7 @@ import type { LeaderboardSnapshot, NetLeaderEntry } from '../net/netTypes.js';
 import { CanvasSign } from './CanvasSign.js';
 import { texturedBox } from './texturedBox.js';
 
-type Category = 'time' | 'wins' | 'level';
+type Category = 'wins' | 'height' | 'time';
 
 interface BoardSpec {
   readonly category: Category;
@@ -25,11 +25,11 @@ interface BoardSpec {
   readonly titleStroke: string;
 }
 
-/** Time (pink), Win (cyan), Level (green), as in the reference. */
+/** Most Wins (cyan), Most Height (green), Most Time (pink). */
 const BOARDS: readonly BoardSpec[] = [
-  { category: 'time', title: 'Time', frame: 0xff8ee8, titleStroke: '#6a1060' },
-  { category: 'wins', title: 'Win', frame: 0x39e0ff, titleStroke: '#0d4a72' },
-  { category: 'level', title: 'Level', frame: 0x39d65a, titleStroke: '#0f5a1f' },
+  { category: 'wins', title: 'Most Wins', frame: 0x39e0ff, titleStroke: '#0d4a72' },
+  { category: 'height', title: 'Most Height', frame: 0x39d65a, titleStroke: '#0f5a1f' },
+  { category: 'time', title: 'Most Time', frame: 0xff8ee8, titleStroke: '#6a1060' },
 ];
 
 const BOARD = { width: 20, height: 22, frame: 2, depth: 2, baseY: 2 } as const;
@@ -191,7 +191,6 @@ class PanelSurface {
 
   private format(value: number): string {
     if (this.spec.category === 'time') return formatDuration(value);
-    if (this.spec.category === 'level') return Math.floor(value).toString();
     return formatNumber(value);
   }
 }

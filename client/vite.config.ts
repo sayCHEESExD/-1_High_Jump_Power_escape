@@ -10,7 +10,15 @@ const repoAssets = fileURLToPath(new URL('../assets', import.meta.url));
  * Files in `assets/` that are never loaded at runtime. `base_rig.fbx` is
  * byte-identical to `player.fbx`; shipping both would double the largest model.
  */
-const UNSHIPPED_ASSETS = ['player/base_rig.fbx'];
+const UNSHIPPED_ASSETS = [
+  'player/base_rig.fbx',
+  // The previous game's shop icon and biome board pictures: this game has neither.
+  'ui/equipment.png',
+  ...[
+    'Grassland', 'Forest', 'Ocean', 'Crystal', 'Desert', 'High Mountain', 'Snow Peak', 'Volcano',
+    'Cloud Kingdom', 'Aurora Sky', 'Candy Heaven', 'Stratosphere', 'Outer Space', 'Galaxy Core',
+  ].map((name) => `ui/${name}.png`),
+];
 
 const pruneUnusedAssets = (): Plugin => ({
   name: 'highjump:prune-unused-assets',
@@ -28,13 +36,13 @@ export default defineConfig({
   /** The repo-level `assets/` is the public root: `/player/*`, `/ui/*`, `/audio/*`. */
   publicDir: repoAssets,
   server: {
-    // Not 5173-5175: the previous games in this series use those.
-    port: 5176,
+    // Not 5173-5176: the previous games in this series use those.
+    port: 5177,
     strictPort: true,
     host: true,
   },
   preview: {
-    port: 4176,
+    port: 4177,
     strictPort: true,
   },
   build: {

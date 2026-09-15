@@ -1,5 +1,5 @@
 import { formatNumber } from '@highjump/shared';
-import { iconUrl, injectHudStyles } from './hudStyles.js';
+import { FOOD_ICON_URL, injectHudStyles } from './hudStyles.js';
 
 /** Most popups on screen at once. A hard ceiling allocated once. */
 const POOL_SIZE = 14;
@@ -8,14 +8,14 @@ const LIFETIME = 1.15;
 const CADENCE = 0.26;
 
 /**
- * The floating "+N" energy popups while running and jumping.
+ * The floating "+N" food popups while eating.
  *
- * Driven by an ACCUMULATOR over the replicated lifetime energy, never by raw
+ * Driven by an ACCUMULATOR over the replicated lifetime food, never by raw
  * patches: only an increase counts, and the gain is released on a fixed
- * cadence so a trickle reads as "+3" and a treadmill sprint as "+300". The
+ * cadence so a trickle reads as "+3" and a feast at a table as "+300". The
  * first reading only takes a baseline, so joining never fires a popup.
  */
-export class EnergyPopups {
+export class FoodPopups {
   private readonly root: HTMLDivElement;
   private readonly pool: HTMLDivElement[] = [];
   private readonly free: number[] = [];
@@ -34,7 +34,7 @@ export class EnergyPopups {
       const node = document.createElement('div');
       node.className = 'hj-pop hj-font';
       node.innerHTML =
-        `<img class="hj-pop__icon" src="${iconUrl('energy.png')}" alt="" draggable="false">` +
+        `<img class="hj-pop__icon" src="${FOOD_ICON_URL}" alt="" draggable="false">` +
         '<span class="hj-pop__value"></span>';
       node.hidden = true;
       this.root.appendChild(node);
