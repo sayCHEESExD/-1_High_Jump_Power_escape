@@ -47,6 +47,16 @@ import { WorldTextures } from './WorldTextures.js';
 /** World units one stud covers. */
 const STUD = 4;
 
+/**
+ * How far a wall sinks into the floor or step it meets.
+ *
+ * Walls used to END exactly on the edge they abut - two faces in one plane,
+ * which the depth buffer cannot order, so the seam shimmered for the whole
+ * length of every biome. Overlapping is the fix: an intersection has a real
+ * winner at every pixel, and being buried it is never seen.
+ */
+const SEAM_OVERLAP = 0.08;
+
 /** Height of the golden light column over each win pad. */
 const GLOW_HEIGHT = 6;
 
@@ -177,15 +187,18 @@ export class CourseWorld {
 
     const walls: [number, number, number, number, number][] = [
       // x, z, width, depth - back, left, right, and the two front segments.
-      [0, HUB.minZ - 1.5, width + 6, 3, h],
-      [HUB.halfWidth + 1.5, (HUB.minZ + HUB.maxZ) / 2, 3, depth + 3, h],
-      [-HUB.halfWidth - 1.5, (HUB.minZ + HUB.maxZ) / 2, 3, depth + 3, h],
-      [(firstHalf + HUB.halfWidth + 3) / 2, HUB.maxZ + 1, HUB.halfWidth + 3 - firstHalf, 2, h],
-      [-(firstHalf + HUB.halfWidth + 3) / 2, HUB.maxZ + 1, HUB.halfWidth + 3 - firstHalf, 2, h],
+      [0, HUB.minZ - 1.5 + SEAM_OVERLAP, width + 6, 3, h],
+      [HUB.halfWidth + 1.5 - SEAM_OVERLAP, (HUB.minZ + HUB.maxZ) / 2, 3, depth + 3, h],
+      [-(HUB.halfWidth + 1.5 - SEAM_OVERLAP), (HUB.minZ + HUB.maxZ) / 2, 3, depth + 3, h],
+      // The front segments reach SEAM_OVERLAP further into the staircase mouth,
+      // so their inner end is not level with the first step's side either.
+      [(firstHalf + HUB.halfWidth + 3) / 2 - SEAM_OVERLAP / 2, HUB.maxZ + 1, HUB.halfWidth + 3 - firstHalf + SEAM_OVERLAP, 2, h],
+      [-((firstHalf + HUB.halfWidth + 3) / 2 - SEAM_OVERLAP / 2), HUB.maxZ + 1, HUB.halfWidth + 3 - firstHalf + SEAM_OVERLAP, 2, h],
     ];
     for (const [x, z, w, d, height] of walls) {
       this.mesh(texturedBox(w, height, d, STUD), wallMat, x, height / 2, z);
-      this.mesh(texturedBox(w + 1, 2, d + 1, STUD), capMat, x, height + 1, z);
+      // The cap sits DOWN into its wall for the same reason.
+      this.mesh(texturedBox(w + 1, 2, d + 1, STUD), capMat, x, height + 1 - SEAM_OVERLAP, z);
     }
 
     const title = new CanvasSign(40, 6, [
@@ -245,7 +258,7 @@ export class CourseWorld {
       const walls: BufferGeometry[] = [];
       for (const side of [-1, 1]) {
         const wall = texturedBox(3, wallTop - wallBottom, maxZ - minZ, STUD * 2);
-        wall.translate(side * (biome.width / 2 + 1.5), (wallTop + wallBottom) / 2, (minZ + maxZ) / 2);
+        wall.translate(side * (biome.width / 2 + 1.5 - SEAM_OVERLAP), (wallTop + wallBottom) / 2, (minZ + maxZ) / 2);
         walls.push(wall);
       }
       this.merged(walls, this.lambert({ color: look.wall, map: bricks }));

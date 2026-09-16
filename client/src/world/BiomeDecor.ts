@@ -64,8 +64,12 @@ const rock = (colors: readonly number[]): Prop => (r) => {
   ];
 };
 
+// Each pebble is a DIFFERENT height: three slabs of one height that happen to
+// overlap share a top plane, and a shared plane flickers.
 const pebbles = (colors: readonly number[]): Prop => (r) =>
-  [0, 1, 2].map((i) => box(0.35 + r() * 0.3, 0.25, 0.35 + r() * 0.3, (r() - 0.5) * 1.6, 0, (r() - 0.5) * 1.6, pick(r, colors), { ry: r() * 3 + i }));
+  [0, 1, 2].map((i) =>
+    box(0.35 + r() * 0.3, 0.22 + i * 0.05, 0.35 + r() * 0.3, (r() - 0.5) * 1.6, 0, (r() - 0.5) * 1.6, pick(r, colors), { ry: r() * 3 + i }),
+  );
 
 const tuft = (colors: readonly number[]): Prop => (r) => {
   const c = pick(r, colors);
@@ -145,7 +149,13 @@ const shell: Prop = (r) => [
 const starfish: Prop = (r) => {
   const c = pick(r, [0xff7a4d, 0xffb84d, 0xff5f9a]);
   const ry = r() * 3;
-  return [box(1.4, 0.15, 0.3, 0, 0, 0, c, { ry }), box(1.4, 0.15, 0.3, 0, 0, 0, c, { ry: ry + 1.26 }), box(1.4, 0.15, 0.3, 0, 0, 0, c, { ry: ry + 2.5 })];
+  // The three arms cross at the middle, so each is a shade thicker than the
+  // last: identical crossing slabs fight over which one is on top.
+  return [
+    box(1.4, 0.15, 0.3, 0, 0, 0, c, { ry }),
+    box(1.4, 0.18, 0.3, 0, 0, 0, c, { ry: ry + 1.26 }),
+    box(1.4, 0.21, 0.3, 0, 0, 0, c, { ry: ry + 2.5 }),
+  ];
 };
 
 const palm: Prop = (r) => {
@@ -309,11 +319,13 @@ const satellite: Prop = (r) => {
 const crater: Prop = (r) => {
   const s = 1 + r();
   const c = 0x4a4e5a;
+  // The four rim pieces MEET AT THE CORNERS, so each is a shade taller than the
+  // last. Four slabs of one height would share a plane wherever they cross.
   return [
     box(2.6 * s, 0.35, 0.5 * s, 0, 0, 1.05 * s, c),
-    box(2.6 * s, 0.35, 0.5 * s, 0, 0, -1.05 * s, c),
-    box(0.5 * s, 0.35, 1.6 * s, 1.05 * s, 0, 0, c),
-    box(0.5 * s, 0.35, 1.6 * s, -1.05 * s, 0, 0, c),
+    box(2.6 * s, 0.38, 0.5 * s, 0, 0, -1.05 * s, c),
+    box(0.5 * s, 0.41, 1.6 * s, 1.05 * s, 0, 0, c),
+    box(0.5 * s, 0.44, 1.6 * s, -1.05 * s, 0, 0, c),
     box(1.6 * s, 0.05, 1.6 * s, 0, 0, 0, 0x2a2d36),
   ];
 };
@@ -392,6 +404,34 @@ const seeded = (seed: number): Rand => {
   };
 };
 
+/**
+ * Flat ground patches are buried in the surface and stand this far proud of it,
+ * rather than floating a hair above: 0.02 of clearance is finer than the depth
+ * buffer can resolve past ~180 units, which made distant patches flicker.
+ */
+const PATCH_RELIEF = 0.12;
+const PATCH_THICKNESS = 0.5;
+
+/**
+ * How much higher each patch on a step sits than the one before it.
+ *
+ * Patches are scattered at random and DO overlap each other. Given one relief
+ * for all of them, two overlapping patches share a top plane - and two planes
+ * at one height have no depth order, which is the fan of stripes where a pale
+ * patch crossed a dark one. Each patch gets its own height instead, so an
+ * overlap is always a clear winner. Still flat: the tallest stands 0.18 proud.
+ */
+const PATCH_STACK_STEP = 0.03;
+
+/**
+ * Props that overlap are sunk by different multiples of this, so no two share a
+ * plane. Sunk rather than lifted: a prop raised off the ground shows a gap under
+ * it, while one buried a few centimetres shows nothing at all.
+ */
+const PROP_SINK_STEP = 0.03;
+/** How many distinct depths the ladder offers before it wraps. */
+const PROP_SINK_LEVELS = 6;
+
 const UNIT = new BoxGeometry(1, 1, 1);
 UNIT.deleteAttribute('uv');
 
@@ -406,6 +446,8 @@ const COLOR = new Color();
 class Batch {
   readonly solid: BufferGeometry[] = [];
   readonly glow: BufferGeometry[] = [];
+  /** Footprints already placed, so an overlapping prop can pick a free depth. */
+  private readonly placed: { minX: number; maxX: number; minZ: number; maxZ: number; y: number; level: number }[] = [];
 
   add(part: Part, ox: number, oy: number, oz: number, spin: number): void {
     const geometry = UNIT.clone();
@@ -431,9 +473,40 @@ class Batch {
     (part.glow ? this.glow : this.solid).push(geometry);
   }
 
+  /**
+   * Place a prop, sunk just far enough to clear the props it overlaps.
+   *
+   * Two props of one kind standing side by side have their flat faces at
+   * IDENTICAL heights, and any pair that overlaps then shares a plane the depth
+   * buffer cannot order - the same flicker as the ground patches. A random
+   * offset is not enough: two draws land within a rounding error often enough to
+   * leave a dozen fighting pairs across the staircase. So each prop reads the
+   * depths of the props it actually overlaps and takes one they are not using.
+   * Nothing moves horizontally: the seeded layout is exactly as it was.
+   */
   prop(prop: Prop, r: Rand, x: number, y: number, z: number): void {
     const spin = r() * Math.PI * 2;
-    for (const part of prop(r)) this.add(part, x, y, z, spin);
+    const parts = prop(r);
+
+    let half = 0.5;
+    for (const part of parts) {
+      const reach = Math.max(part.w, part.d) / 2;
+      half = Math.max(half, Math.abs(part.x) + reach, Math.abs(part.z) + reach);
+    }
+
+    const taken = new Set<number>();
+    for (const other of this.placed) {
+      // Only props on the same surface can share a plane.
+      if (Math.abs(other.y - y) > 1) continue;
+      if (x + half <= other.minX || x - half >= other.maxX) continue;
+      if (z + half <= other.minZ || z - half >= other.maxZ) continue;
+      taken.add(other.level);
+    }
+    let level = 0;
+    while (taken.has(level) && level < PROP_SINK_LEVELS - 1) level += 1;
+    this.placed.push({ minX: x - half, maxX: x + half, minZ: z - half, maxZ: z + half, y, level });
+
+    for (const part of parts) this.add(part, x, y - level * PROP_SINK_STEP, z, spin);
   }
 }
 
@@ -493,7 +566,17 @@ export class BiomeDecor {
       const x = step.minX + w / 2 + 1 + r() * (step.maxX - step.minX - w - 2);
       const z = step.minZ + d / 2 + 1 + r() * (depth - d - 2);
       if (!clearOfPad(x, z, Math.max(w, d) / 2)) continue;
-      batch.add({ w, h: 0.08, d, x: 0, y: 0.06, z: 0, c: pick(r, theme.patches) }, x, top, z, r() * 0.4 - 0.2);
+      // SUNK into the step, standing PATCH_RELIEF proud of it. A thin slab a
+      // hair above the surface z-fights once it is far enough away that the
+      // depth buffer can no longer tell the two apart.
+      const relief = PATCH_RELIEF + i * PATCH_STACK_STEP;
+      batch.add(
+        { w, h: PATCH_THICKNESS, d, x: 0, y: relief - PATCH_THICKNESS / 2, z: 0, c: pick(r, theme.patches) },
+        x,
+        top,
+        z,
+        r() * 0.4 - 0.2,
+      );
     }
 
     // Rocks and details on the riser the player jumps up.

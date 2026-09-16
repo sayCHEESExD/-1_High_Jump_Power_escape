@@ -72,6 +72,10 @@ and the world is a **staircase** climbing along +Z through 14 biomes.
   writes motion, so jump physics is unchanged.
 - Spring boots (`SpringBoots`) hang off the lower leg bones; while worn, `PlayerCharacter`
   lifts the body by `SPRING_LIFT` so the springs reach the ground.
+- **No two faces may be LEVEL.** Boxes that meet must overlap (walls sink into their
+  floor by `SEAM_OVERLAP`; ground patches are buried and stand `PATCH_RELIEF` proud;
+  stacked slabs get different heights). Two surfaces in one plane have no depth order,
+  so they flicker - and a gap under ~0.02 fails the same way past ~180 units.
 - World textures are drawn on canvases (`WorldTextures`). The only image files are the
   supplied player texture, the HUD icons in `assets/ui/`, and one picture per biome in
   `assets/ui/` named exactly after the biome (`Snow Peak.png`), drawn on its `BiomeSign`.

@@ -62,16 +62,30 @@ const bench: Prop = () => [
   box(3.2, 0.7, 0.2, 0, 1.3, -0.45, 0xb5713a),
 ];
 
+/** Where the soil surface sits, so the flowers are planted in it rather than through it. */
+const PLANTER_SOIL_TOP = 1.18;
+
 const planter: Prop = (r) => {
+  /*
+   * Pot, rim, then soil.
+   *
+   * The soil OVERLAPS down into the rim and stands proud of it. It used to end
+   * at exactly the rim's height, which puts two faces in the same plane with
+   * nothing to separate them - and a merged, depth-tested mesh then flickers
+   * between the two per pixel, which is the glitching the pots showed. No two
+   * faces here are level: every box either overlaps its neighbour or clears it.
+   */
   const parts: Part[] = [
     box(3.2, 0.9, 3.2, 0, 0, 0, 0xc9784a),
     box(3.4, 0.2, 3.4, 0, 0.9, 0, 0xe0a070),
-    box(2.8, 0.1, 2.8, 0, 1.0, 0, 0x5c3a1e),
+    box(2.8, 0.14, 2.8, 0, PLANTER_SOIL_TOP - 0.14, 0, 0x5c3a1e),
   ];
   for (let i = 0; i < 6; i += 1) {
     const ox = (r() - 0.5) * 2.2;
     const oz = (r() - 0.5) * 2.2;
-    for (const part of flower(PETALS)(r)) parts.push({ ...part, x: part.x + ox, y: part.y + 1.05, z: part.z + oz });
+    for (const part of flower(PETALS)(r)) {
+      parts.push({ ...part, x: part.x + ox, y: part.y + PLANTER_SOIL_TOP, z: part.z + oz });
+    }
   }
   return parts;
 };
@@ -108,8 +122,10 @@ export class HubDecor {
       }
     };
     const bed = (cx: number, cz: number, w: number, d: number): void => {
-      batch.add({ w, h: 0.08, d, x: 0, y: 0.04, z: 0, c: 0x3fae3a }, cx, 0, cz, 0);
-      batch.add({ w: w - 1.2, h: 0.1, d: d - 1.2, x: 0, y: 0.05, z: 0, c: 0x4fc34a }, cx, 0, cz, 0);
+      // Sunk into the floor and standing proud of it, at two DIFFERENT heights:
+      // slabs level with each other or with the floor flicker (see BiomeDecor).
+      batch.add({ w, h: 0.5, d, x: 0, y: 0.11 - 0.25, z: 0, c: 0x3fae3a }, cx, 0, cz, 0);
+      batch.add({ w: w - 1.2, h: 0.5, d: d - 1.2, x: 0, y: 0.17 - 0.25, z: 0, c: 0x4fc34a }, cx, 0, cz, 0);
       scatter([tuft(LEAVES), flower(PETALS), flower(PETALS), pebbles(GREY)], cx, cz, w - 2, d - 2, Math.round((w * d) / 9));
     };
 
