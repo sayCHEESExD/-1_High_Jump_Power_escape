@@ -13,8 +13,11 @@ import { isEquippedId, type LegionEquipped } from './legionTypes.js';
 const SLOTS = ['hatId', 'backId', 'skinId', 'headId', 'armLId', 'armRId', 'legLId', 'legRId', 'torsoId'] as const;
 
 const EMPTY = '-';
-/** Ids are short and alphanumeric; anything else is treated as unequipped. */
-const ID = /^[A-Za-z0-9_-]{1,12}$/;
+/**
+ * A catalogue id, which is a 24-character hex string today. The bound is
+ * deliberately loose - but it IS bounded, because this is replicated.
+ */
+const ID = /^[A-Za-z0-9_-]{1,32}$/;
 
 export const encodeEquipped = (equipped: LegionEquipped): string =>
   SLOTS.map((slot) => {

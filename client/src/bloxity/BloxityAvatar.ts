@@ -191,7 +191,8 @@ export class BloxityAvatar {
           texture.dispose();
           return;
         }
-        pixelArt(texture);
+        // A skin wraps the glTF body: glTF UV convention.
+        pixelArt(texture, false);
         this.textures.push(texture);
         material.map = texture;
         material.needsUpdate = true;
@@ -232,7 +233,8 @@ export class BloxityAvatar {
         texture.dispose();
         return;
       }
-      pixelArt(texture);
+      // Hats and back items are OBJ meshes: ordinary UV convention.
+      pixelArt(texture, true);
       this.textures.push(texture);
       const material = new MeshStandardMaterial({ map: texture, roughness: 0.85 });
       object.traverse((child) => {
@@ -315,10 +317,18 @@ export class BloxityAvatar {
 const bodyKeyOf = (e: LegionEquipped): string =>
   [e.headId, e.torsoId, e.armLId, e.armRId, e.legLId, e.legRId].map((id) => (isEquippedId(id) ? id : '-')).join('|');
 
-/** Bloxity textures are pixel art; smoothing turns faces into smudges. */
-const pixelArt = (texture: Texture): void => {
+/**
+ * Bloxity textures are pixel art; smoothing turns faces into smudges.
+ *
+ * `flipY` is NOT one setting for all of them, which is what made hats and back
+ * items render as smears. A SKIN dresses the glTF body, whose UVs are authored
+ * the glTF way (origin at the top, `flipY` false). A hat or a back item is an
+ * OBJ, whose UVs are authored the ordinary way (origin at the bottom, `flipY`
+ * true, three's default). Verified item by item against Bloxity's own viewer.
+ */
+const pixelArt = (texture: Texture, flipY: boolean): void => {
   texture.colorSpace = SRGBColorSpace;
-  texture.flipY = false;
+  texture.flipY = flipY;
   texture.magFilter = NearestFilter;
   texture.minFilter = NearestFilter;
   texture.generateMipmaps = false;

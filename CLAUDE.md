@@ -137,6 +137,10 @@ and the world is a **staircase** climbing along +Z through 14 biomes.
   `player.glb` (plus its default skin) through `PlayerCharacter.setModel`; hats/back hang
   on bones; proportions scale bones, never rotate them. `player.fbx` and its texture are
   the fallback only: before Bloxity answers, after `clear()`, or if the body fails to load.
+- **Texture orientation differs by item kind.** A SKIN dresses Bloxity's glTF body and
+  needs `flipY` false; a HAT or BACK item is an OBJ and needs `flipY` true (three's
+  default). One setting for both renders the other as a smear. Ids are 24-char catalogue
+  ids - never assume they are short.
 - Appearance is replicated: the client sends its equipped ids (`avatarCode.ts`) as
   `MessageType.BloxityAvatar`, the room sanitises them into `PlayerState.avatar`, and
   `RemotePlayer` wears them. Ids only - appearance grants nothing, which is why the

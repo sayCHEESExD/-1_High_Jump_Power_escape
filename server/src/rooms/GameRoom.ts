@@ -40,7 +40,7 @@ const SCOPE = 'GameRoom';
 const AUTOSAVE_SECONDS = 15;
 
 /** The only shape a replicated Bloxity avatar code may take. */
-const AVATAR_CODE = /^[A-Za-z0-9_,-]{0,120}$/;
+const AVATAR_CODE = /^[A-Za-z0-9_,-]{0,320}$/;
 
 /** Milliseconds between two shop/menu requests from one player. */
 const REQUEST_COOLDOWN_MS = 150;
