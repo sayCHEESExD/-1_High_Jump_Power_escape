@@ -7,6 +7,7 @@ import {
   handleFor,
   shopSecondsLeft,
   shopSlotAt,
+  type BloxityAvatarMessage,
   type BloxityIdentityMessage,
   type ClaimWinMessage,
   type IndexMessage,
@@ -37,6 +38,9 @@ const SCOPE = 'GameRoom';
 
 /** Seconds between autosaves of every connected player. */
 const AUTOSAVE_SECONDS = 15;
+
+/** The only shape a replicated Bloxity avatar code may take. */
+const AVATAR_CODE = /^[A-Za-z0-9_,-]{0,120}$/;
 
 /** Milliseconds between two shop/menu requests from one player. */
 const REQUEST_COOLDOWN_MS = 150;
@@ -139,6 +143,9 @@ export class GameRoom extends Room<GameState> {
 
     this.onMessage(MessageType.BloxityIdentity, (client, message: BloxityIdentityMessage) =>
       this.resolveIdentity(client.sessionId, typeof message?.token === 'string' ? message.token : ''),
+    );
+    this.onMessage(MessageType.BloxityAvatar, (client, message: BloxityAvatarMessage) =>
+      this.setAvatar(client.sessionId, typeof message?.equipped === 'string' ? message.equipped : ''),
     );
 
     this.setSimulationInterval((deltaMs) => this.tick(deltaMs / 1000), serverConfig.patchRateMs);
@@ -271,6 +278,20 @@ export class GameRoom extends Room<GameState> {
       this.autosaveTimer = 0;
       for (const [sessionId, player] of this.state.players) this.persist(sessionId, player);
     }
+  }
+
+  /**
+   * Publish a player's Bloxity appearance to the room.
+   *
+   * Sanitised rather than trusted verbatim: it grants nothing, but it IS
+   * replicated to everyone, so only an id-shaped string of a sane length is
+   * ever stored. Anything else replicates as "no Bloxity look".
+   */
+  private setAvatar(sessionId: string, equipped: string): void {
+    const player = this.state.players.get(sessionId);
+    if (!player) return;
+    const code = AVATAR_CODE.test(equipped) ? equipped : '';
+    if (player.avatar !== code) player.avatar = code;
   }
 
   /**

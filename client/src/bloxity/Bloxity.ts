@@ -359,6 +359,11 @@ export class Bloxity {
   }
 
   private pushAvatar(): void {
+    // No avatar namespace means Bloxity has no appearance for this player, so
+    // the game is told nothing and keeps its bundled character. Anything else -
+    // an account whose avatar is entirely DEFAULT included - is a real Bloxity
+    // look, and a real Bloxity look always wins over the bundled one.
+    if (!sdk()?.avatar) return;
     this.host.avatarChanged(this.getEquipped(), this.getProportions());
   }
 

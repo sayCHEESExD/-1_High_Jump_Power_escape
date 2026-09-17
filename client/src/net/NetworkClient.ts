@@ -1,6 +1,7 @@
 import {
   MessageType,
   ROOM_NAME,
+  type BloxityAvatarMessage,
   type BloxityIdentityMessage,
   type ClaimWinMessage,
   type IndexMessage,
@@ -80,6 +81,12 @@ export class NetworkClient {
   sendIdentity(token: string | null): void {
     const message: BloxityIdentityMessage = { token: token ?? '' };
     this.room?.send(MessageType.BloxityIdentity, message);
+  }
+
+  /** Publish this player's Bloxity appearance, so the room can draw it on them. */
+  sendAvatar(equipped: string): void {
+    const message: BloxityAvatarMessage = { equipped };
+    this.room?.send(MessageType.BloxityAvatar, message);
   }
 
   /** The Colyseus room id, or '' when not in one. */

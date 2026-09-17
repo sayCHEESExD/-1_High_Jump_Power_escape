@@ -165,7 +165,8 @@ export class BloxityPanel {
       this.button(friendsLabel, 'hj-account__btn', () => void this.openFriends()),
       this.button('Avatar', 'hj-account__btn', () => this.openAvatar()),
       this.button('Bux', 'hj-account__btn', () => void this.openBux()),
-      this.button('Log out', 'hj-account__btn', () => this.bloxity.logout()),
+      // Deliberately NO log out: signing out is the portal's business, and this
+      // game never asks for it. Bloxity's own auth is untouched.
     );
 
     this.chip.append(row, actions);

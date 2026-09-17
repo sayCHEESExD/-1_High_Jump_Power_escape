@@ -132,9 +132,17 @@ and the world is a **staircase** climbing along +Z through 14 biomes.
   `BLOXITY_WEBHOOK_SECRET`; without it every delivery is refused). The SKU -> Wins table
   is `server/src/bloxity/BuxGrants.ts`; grants are queued to disk, then applied through
   `wallet.add` to the session whose token the server verified with Bloxity.
-- Avatar cosmetics dress the LOCAL character only (`BloxityAvatar`): a skin or body part
-  swaps in Bloxity's `player.glb` via `PlayerCharacter.setModel`; hats/back hang on bones;
-  proportions scale bones, never rotate them.
+- **The Bloxity avatar is the source of truth for how a player looks.** Whenever the SDK
+  has an appearance - a wholly DEFAULT avatar included - `BloxityAvatar` wears Bloxity's
+  `player.glb` (plus its default skin) through `PlayerCharacter.setModel`; hats/back hang
+  on bones; proportions scale bones, never rotate them. `player.fbx` and its texture are
+  the fallback only: before Bloxity answers, after `clear()`, or if the body fails to load.
+- Appearance is replicated: the client sends its equipped ids (`avatarCode.ts`) as
+  `MessageType.BloxityAvatar`, the room sanitises them into `PlayerState.avatar`, and
+  `RemotePlayer` wears them. Ids only - appearance grants nothing, which is why the
+  client's own word is enough. Proportions are not replicated.
+- The panel has NO log out button: signing out belongs to the portal. Never call
+  `auth.logout()` from game UI.
 
 ## Verification
 

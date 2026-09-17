@@ -14,6 +14,12 @@ export class PlayerState extends Schema {
   @type('string') handle = '';
   /** The Bloxity display name, set ONLY from a token the server verified. '' for guests. */
   @type('string') displayName = '';
+  /**
+   * The player's Bloxity avatar, as equipped ids. Appearance only - it grants
+   * nothing - so it is taken from the client, sanitised, and replicated so
+   * everyone else in the room draws the same character.
+   */
+  @type('string') avatar = '';
 
   @type('float32') x: number = SPAWN_POSITION.x;
   @type('float32') y: number = SPAWN_POSITION.y;

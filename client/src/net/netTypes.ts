@@ -9,6 +9,8 @@ export interface NetPlayerState {
   handle: string;
   /** Verified Bloxity display name, or '' for a guest. */
   displayName: string;
+  /** The Bloxity avatar as equipped ids, or '' for a player with no Bloxity look. */
+  avatar: string;
   x: number;
   y: number;
   z: number;

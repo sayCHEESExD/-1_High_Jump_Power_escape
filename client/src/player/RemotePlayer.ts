@@ -1,5 +1,8 @@
 import { TRAINING, bestOwnedBoot, treadmillRate } from '@highjump/shared';
 import { createAnimationInput, type AnimationInput } from '../animation/AnimationInput.js';
+import { decodeEquipped } from '../bloxity/avatarCode.js';
+import { BloxityAvatar } from '../bloxity/BloxityAvatar.js';
+import { DEFAULT_PROPORTIONS } from '../bloxity/legionTypes.js';
 import type { NetPlayerState } from '../net/netTypes.js';
 import { PlayerCharacter } from './PlayerCharacter.js';
 
@@ -35,6 +38,9 @@ export class RemotePlayer {
   private lastFlipCount: number;
   private wasGrounded = true;
   private placed = false;
+  /** Their Bloxity appearance, built only once they turn out to have one. */
+  private avatar: BloxityAvatar | null = null;
+  private avatarCode = '';
 
   constructor(state: NetPlayerState) {
     this.lastJumpCount = state.jumpCount;
@@ -68,6 +74,26 @@ export class RemotePlayer {
 
     this.character.setCosmetics(state.trailSlot, state.auraSlot);
     this.character.setBoots(bestOwnedBoot(state.ownedBoots)?.slot ?? 0);
+    this.wearAvatar(state.avatar);
+  }
+
+  /**
+   * Wear the Bloxity look the server replicated for this player.
+   *
+   * Proportions are not replicated, so a remote stands at Bloxity's default
+   * build - the SKIN and the items are what identify somebody across a room.
+   * An empty code means no Bloxity appearance, and the bundled character is
+   * what a player without one is meant to look like.
+   */
+  private wearAvatar(code: string): void {
+    if (code === this.avatarCode) return;
+    this.avatarCode = code;
+    if (!code) {
+      this.avatar?.clear();
+      return;
+    }
+    this.avatar ??= new BloxityAvatar(this.character);
+    this.avatar.apply(decodeEquipped(code), DEFAULT_PROPORTIONS);
   }
 
   update(delta: number): void {
@@ -97,6 +123,7 @@ export class RemotePlayer {
   }
 
   dispose(): void {
+    this.avatar?.dispose();
     this.character.dispose();
   }
 }

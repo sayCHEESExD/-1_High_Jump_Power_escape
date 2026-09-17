@@ -59,6 +59,12 @@ export const MessageType = {
    * The server verifies it with Bloxity; it never trusts an id from a client.
    */
   BloxityIdentity: 'bloxityIdentity',
+  /**
+   * Client -> server: the player's Bloxity APPEARANCE, as equipped-item ids, so
+   * the room can draw it on them. Appearance buys nothing and unlocks nothing,
+   * which is what makes it the one thing a client may assert about itself.
+   */
+  BloxityAvatar: 'bloxityAvatar',
 } as const;
 
 export type MessageType = (typeof MessageType)[keyof typeof MessageType];

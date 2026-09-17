@@ -44,6 +44,14 @@ export interface IndexMessage {
 }
 
 /**
+ * "This is what my Bloxity avatar wears." Equipped ids only, never a texture or
+ * a URL, and empty for a player with no Bloxity appearance.
+ */
+export interface BloxityAvatarMessage {
+  equipped: string;
+}
+
+/**
  * "My Bloxity token is now this." A TOKEN, not an id: the server resolves it
  * with Bloxity, so nobody can claim another account's paid-for Bux grants by
  * naming its id. Empty means logged out.

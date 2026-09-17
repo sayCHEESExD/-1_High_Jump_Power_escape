@@ -10,6 +10,7 @@ import { AudioManager } from '../audio/AudioManager.js';
 import { PlayerAudio } from '../audio/PlayerAudio.js';
 import { Bloxity } from '../bloxity/Bloxity.js';
 import { BloxityAvatar } from '../bloxity/BloxityAvatar.js';
+import { encodeEquipped } from '../bloxity/avatarCode.js';
 import type { LegionEquipped, LegionProportions } from '../bloxity/legionTypes.js';
 import { ThirdPersonCamera } from '../camera/ThirdPersonCamera.js';
 import { clientConfig } from '../config/clientConfig.js';
@@ -123,6 +124,8 @@ export class Game {
   private bloxityAvatar: BloxityAvatar | null = null;
   /** The latest look, held until the character is built. */
   private pendingLook: { equipped: LegionEquipped; proportions: LegionProportions } | null = null;
+  /** This player's Bloxity look as a replicable code, so remotes can draw it. */
+  private bloxityAvatarCode = '';
   /** Remote players already announced to Bloxity, so a name is toasted once. */
   private readonly announced = new Set<string>();
   private joinedAt = 0;
@@ -153,6 +156,8 @@ export class Game {
         const roomId = this.network.roomId;
         this.bloxity.updateRoom(roomId);
         this.bloxityPanel.setRoom(roomId);
+        // The look was settled before the room existed; publish it on arrival.
+        this.network.sendAvatar(this.bloxityAvatarCode);
       },
       onPlayerAdded: (sessionId, state) => this.onPlayerState(sessionId, state, true),
       onPlayerChanged: (sessionId, state) => this.onPlayerState(sessionId, state, false),
@@ -188,6 +193,9 @@ export class Game {
       avatarChanged: (equipped, proportions) => {
         if (this.bloxityAvatar) this.bloxityAvatar.apply(equipped, proportions);
         else this.pendingLook = { equipped, proportions };
+        // Published so the OTHER players in the room wear it too. Ids only.
+        this.bloxityAvatarCode = encodeEquipped(equipped);
+        this.network.sendAvatar(this.bloxityAvatarCode);
         this.bloxityPanel.refreshAvatar();
       },
       // A login or logout after joining. Before joining this is a no-op and the

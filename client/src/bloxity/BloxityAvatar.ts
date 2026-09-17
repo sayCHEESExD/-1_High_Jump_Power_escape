@@ -28,19 +28,23 @@ const FBX_BACK_OFFSET = -0.18;
 
 const SCRATCH = new Vector3();
 
+/** The `bodyKey` of the bundled character. No Bloxity loadout can spell it. */
+const BUNDLED_BODY = 'bundled';
+
 /**
- * Bloxity cosmetics on the LOCAL player's character.
+ * A Bloxity avatar worn by a character - the local player's, or a remote's.
  *
- *  - the BODY: `player.glb` with its parts swapped in, but only when the
- *    account wears a skin or a body part - a Bloxity skin is UV-mapped for
- *    that body and would be garbage on `player.fbx`, so an account with neither
- *    keeps the bundled character exactly as it was;
- *  - the SKIN, as the body material's map;
+ *  - the BODY: `player.glb` with its parts swapped in. Worn whenever Bloxity
+ *    HAS an appearance for this player, a wholly default avatar included,
+ *    because Bloxity's avatar is the source of truth for how they look;
+ *  - the SKIN, as the body material's map (Bloxity's default skin when the
+ *    account equips none - a Bloxity skin is UV-mapped for that body);
  *  - the HAT and BACK item, parented to real bones so they follow the jump;
  *  - the PROPORTIONS, as scales and offsets on bones. Never rotations:
  *    `PlayerRig` rebuilds every bone quaternion each frame.
  *
- * Remote players are not dressed: their equipped ids are not replicated.
+ * The character bundled with this game is the FALLBACK, and only that: it is
+ * worn before Bloxity answers, after `clear()`, and if the body fails to load.
  */
 export class BloxityAvatar {
   private readonly objLoader = new OBJLoader();
@@ -49,7 +53,8 @@ export class BloxityAvatar {
   private equipped: LegionEquipped = {};
   private proportions: LegionProportions = DEFAULT_PROPORTIONS;
 
-  private bodyKey = '';
+  /** Which body is worn; `BUNDLED_BODY` while the game's own character is. */
+  private bodyKey = BUNDLED_BODY;
   private bodyToken = 0;
   private bones = new Map<string, Bone>();
   private material: MeshStandardMaterial | null = null;
@@ -70,19 +75,40 @@ export class BloxityAvatar {
     this.bind(character.modelRoot, false);
   }
 
-  /** Wear this look. Safe to call on every avatar event; unchanged slots do no work. */
+  /**
+   * Wear this Bloxity look. Safe to call on every avatar event; unchanged slots
+   * do no work.
+   *
+   * ALWAYS Bloxity's body, even when the account has nothing equipped: an empty
+   * loadout IS the Bloxity default avatar - their body wearing their default
+   * skin - not an invitation to show the character bundled with this game.
+   * Wearing ours there was the bug, and it made every default avatar look like
+   * our own character. The bundled body is now only ever reached through
+   * `clear()` or when Bloxity's body cannot be loaded at all.
+   */
   apply(equipped: LegionEquipped, proportions: LegionProportions): void {
     if (this.disposed) return;
     this.equipped = equipped;
     this.proportions = proportions;
 
-    const wantsBody = isEquippedId(equipped.skinId) || hasParts(equipped);
-    const key = wantsBody ? bodyKeyOf(equipped) : '';
+    const key = bodyKeyOf(equipped);
     if (key !== this.bodyKey) {
       this.bodyKey = key;
-      void this.rebuildBody(wantsBody);
+      void this.rebuildBody(true);
     }
     this.wearLayers();
+  }
+
+  /**
+   * Go back to the bundled character: this player has no Bloxity appearance to
+   * show, because they signed out or were never on Bloxity at all.
+   */
+  clear(): void {
+    if (this.disposed || this.bodyKey === BUNDLED_BODY) return;
+    this.bodyKey = BUNDLED_BODY;
+    this.equipped = {};
+    this.proportions = DEFAULT_PROPORTIONS;
+    void this.rebuildBody(false);
   }
 
   dispose(): void {
@@ -284,8 +310,6 @@ export class BloxityAvatar {
     write(bone.userData['restPosition'] as Vector3, bone);
   }
 }
-
-const hasParts = (e: LegionEquipped): boolean => [e.headId, e.torsoId, e.armLId, e.armRId, e.legLId, e.legRId].some(isEquippedId);
 
 /** Body parts only: a hat or skin change must not refetch an identical body. */
 const bodyKeyOf = (e: LegionEquipped): string =>
