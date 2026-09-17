@@ -1,5 +1,7 @@
 import { PLAYER_HEIGHT } from '@highjump/shared';
 import {
+  LinearFilter,
+  LinearMipmapLinearFilter,
   Mesh,
   MeshStandardMaterial,
   NearestFilter,
@@ -192,7 +194,7 @@ export class BloxityAvatar {
           return;
         }
         // A skin wraps the glTF body: glTF UV convention.
-        pixelArt(texture, false);
+        dressTexture(texture, false);
         this.textures.push(texture);
         material.map = texture;
         material.needsUpdate = true;
@@ -234,7 +236,7 @@ export class BloxityAvatar {
         return;
       }
       // Hats and back items are OBJ meshes: ordinary UV convention.
-      pixelArt(texture, true);
+      dressTexture(texture, true);
       this.textures.push(texture);
       const material = new MeshStandardMaterial({ map: texture, roughness: 0.85 });
       object.traverse((child) => {
@@ -317,8 +319,14 @@ export class BloxityAvatar {
 const bodyKeyOf = (e: LegionEquipped): string =>
   [e.headId, e.torsoId, e.armLId, e.armRId, e.legLId, e.legRId].map((id) => (isEquippedId(id) ? id : '-')).join('|');
 
+/** Up to this size a Bloxity texture is pixel art and must not be smoothed. */
+const PIXEL_ART_MAX = 128;
+
 /**
- * Bloxity textures are pixel art; smoothing turns faces into smudges.
+ * Settle a Bloxity texture: colour space, orientation and FILTERING.
+ *
+ * Bloxity's catalogue mixes 16px pixel art with 4096px painted detail, and the
+ * two want opposite filtering.
  *
  * `flipY` is NOT one setting for all of them, which is what made hats and back
  * items render as smears. A SKIN dresses the glTF body, whose UVs are authored
@@ -326,12 +334,28 @@ const bodyKeyOf = (e: LegionEquipped): string =>
  * OBJ, whose UVs are authored the ordinary way (origin at the bottom, `flipY`
  * true, three's default). Verified item by item against Bloxity's own viewer.
  */
-const pixelArt = (texture: Texture, flipY: boolean): void => {
+const dressTexture = (texture: Texture, flipY: boolean): void => {
   texture.colorSpace = SRGBColorSpace;
   texture.flipY = flipY;
-  texture.magFilter = NearestFilter;
-  texture.minFilter = NearestFilter;
-  texture.generateMipmaps = false;
+
+  // `Texture.image` is loosely typed; every source here is an HTMLImageElement.
+  const image = texture.image as { width?: number; height?: number } | undefined;
+  const size = Math.max(image?.width ?? 0, image?.height ?? 0);
+  if (size <= PIXEL_ART_MAX) {
+    // Genuine pixel art: smoothing turns a 16px face into a smudge.
+    texture.magFilter = NearestFilter;
+    texture.minFilter = NearestFilter;
+    texture.generateMipmaps = false;
+  } else {
+    // NOT pixel art. Nearest with no mipmaps samples one texel per pixel, so a
+    // 1024px hat drawn over a head-sized patch of screen skips most of the
+    // image and lands on a different texel every frame - the speckled, torn
+    // look these items had. Mipmaps are what a texture this size is for.
+    texture.magFilter = LinearFilter;
+    texture.minFilter = LinearMipmapLinearFilter;
+    texture.generateMipmaps = true;
+    texture.anisotropy = 8;
+  }
   texture.needsUpdate = true;
 };
 
